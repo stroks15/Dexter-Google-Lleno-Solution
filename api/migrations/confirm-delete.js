@@ -19,6 +19,7 @@ export default async function handler(req,res){
     return json(res,409,{error:"reauthorize_source_for_deletion",message:"Drive source is read-only. Reauthorize only now, after verifying the destination, to grant deletion permission."});
   await sb("dexter_google_migration_jobs?id=eq."+encodeURIComponent(jobId),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({delete_confirmation_at:new Date().toISOString(),status:"delete_pending",updated_at:new Date().toISOString()})});
   const token=await getAccessToken("source",user.id);
+  const destinationToken=await getAccessToken("destination",user.id);
   const results=[];
   for(const file of files){
     if(file.source_service!=="drive"){results.push({fileId:file.source_file_id,status:"unsupported"});continue;}
