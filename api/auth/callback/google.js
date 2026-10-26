@@ -37,9 +37,9 @@ export default async function handler(req,res) {
     });
     const connection=connectionRows?.[0];
     if (!connection?.id) throw new Error("connection_upsert_failed");
-    await sb("dexter_google_oauth_secrets?on_conflict=connection_id",{
+    await sb("dexter_google_credentials?on_conflict=user_id,account_role",{
       method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
-      body:JSON.stringify([{connection_id:connection.id,encrypted_refresh_token:ciphertext,key_version:"aes-256-gcm-v1",updated_at:new Date().toISOString()}])
+      body:JSON.stringify([{user_id:userId,account_role:role,google_subject:info.sub,email:info.email,scopes,encrypted_refresh_token:ciphertext,encryption_version:"aes-256-gcm-v1",revoked_at:null,updated_at:new Date().toISOString()}])
     });
     res.setHeader("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'");
     res.setHeader("Content-Type","text/html; charset=utf-8");
