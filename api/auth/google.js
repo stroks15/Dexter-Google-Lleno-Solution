@@ -18,10 +18,13 @@ export default async function handler(req,res) {
       response_type:"code",
       scope:["openid","email","profile",...scopes].join(" "),
       access_type:"offline",
-      prompt:"consent select_account",
+      prompt:role === "account_source" ? "consent" : "consent select_account",
       include_granted_scopes:"false",
       state
     });
+    // Prefer the authenticated Google identity for the source account where Google can honor it.
+    // Drive permissions are still separately consented to here; destination always allows account selection.
+    if (role === "account_source" && user.email) params.set("login_hint",user.email);
     return res.status(200).json({url:"https://accounts.google.com/o/oauth2/v2/auth?"+params.toString(),expiresIn:600,role});
   } catch(e) { return apiError(res,e); }
 }
