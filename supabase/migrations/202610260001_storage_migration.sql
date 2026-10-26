@@ -1,11 +1,10 @@
--- Storage migration foundation. OAuth secrets are server-only and envelope-encrypted.
-create extension if not exists pgcrypto;
-
-create type public.migration_status as enum (
+-- Dexter Google Lleno Solution: isolated tables inside the existing clinic project.
+-- All objects are namespaced to avoid collisions with veterinary production tables.
+create type public.dexter_google_migration_status as enum (
   'queued','scanning','copying','verifying','verified','delete_pending','deleted','failed','cancelled'
 );
 
-create table public.google_connections (
+create table public.dexter_google_connections (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   role text not null check (role in ('source','destination')),
@@ -17,19 +16,19 @@ create table public.google_connections (
   unique(user_id, role)
 );
 
--- Backend-only secrets table. No browser role receives grants; service role access only.
-create table public.google_oauth_secrets (
-  connection_id uuid primary key references public.google_connections(id) on delete cascade,
+-- Only trusted backend/service-role code may access encrypted OAuth secrets.
+create table public.dexter_google_oauth_secrets (
+  connection_id uuid primary key references public.dexter_google_connections(id) on delete cascade,
   encrypted_refresh_token bytea not null,
   key_version text not null,
   updated_at timestamptz not null default now()
 );
 
-create table public.migration_jobs (
+create table public.dexter_google_migration_jobs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   mode text not null check (mode in ('photos_videos','videos_only','drive','all','largest')),
-  status public.migration_status not null default 'queued',
+  status public.dexter_google_migration_status not null default 'queued',
   total_bytes bigint not null default 0 check (total_bytes >= 0),
   processed_bytes bigint not null default 0 check (processed_bytes >= 0),
   verified_bytes bigint not null default 0 check (verified_bytes >= 0),
@@ -39,9 +38,9 @@ create table public.migration_jobs (
   updated_at timestamptz not null default now()
 );
 
-create table public.migration_files (
+create table public.dexter_google_migration_files (
   id uuid primary key default gen_random_uuid(),
-  job_id uuid not null references public.migration_jobs(id) on delete cascade,
+  job_id uuid not null references public.dexter_google_migration_jobs(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   source_service text not null check (source_service in ('drive','photos')),
   source_file_id text not null,
@@ -53,7 +52,7 @@ create table public.migration_files (
   source_sha256 text,
   destination_md5 text,
   destination_sha256 text,
-  status public.migration_status not null default 'queued',
+  status public.dexter_google_migration_status not null default 'queued',
   selected_for_migration boolean not null default true,
   verified_at timestamptz,
   delete_requested_at timestamptz,
@@ -64,20 +63,23 @@ create table public.migration_files (
   unique(job_id, source_service, source_file_id)
 );
 
-create index migration_jobs_user_created_idx on public.migration_jobs(user_id, created_at desc);
-create index migration_files_job_status_idx on public.migration_files(job_id, status);
-create index migration_files_largest_idx on public.migration_files(job_id, size_bytes desc);
+create index dexter_google_jobs_user_created_idx on public.dexter_google_migration_jobs(user_id, created_at desc);
+create index dexter_google_files_job_status_idx on public.dexter_google_migration_files(job_id, status);
+create index dexter_google_files_largest_idx on public.dexter_google_migration_files(job_id, size_bytes desc);
 
-alter table public.google_connections enable row level security;
-alter table public.google_oauth_secrets enable row level security;
-alter table public.migration_jobs enable row level security;
-alter table public.migration_files enable row level security;
+alter table public.dexter_google_connections enable row level security;
+alter table public.dexter_google_oauth_secrets enable row level security;
+alter table public.dexter_google_migration_jobs enable row level security;
+alter table public.dexter_google_migration_files enable row level security;
 
-create policy "users manage own google connections" on public.google_connections
+create policy "dexter google users own connections" on public.dexter_google_connections
   for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "users manage own migration jobs" on public.migration_jobs
+create policy "dexter google users own jobs" on public.dexter_google_migration_jobs
   for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "users manage own migration files" on public.migration_files
+create policy "dexter google users own files" on public.dexter_google_migration_files
   for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-revoke all on public.google_oauth_secrets from anon, authenticated;
+revoke all on public.dexter_google_oauth_secrets from anon, authenticated;
+revoke all on public.dexter_google_connections from anon;
+revoke all on public.dexter_google_migration_jobs from anon;
+revoke all on public.dexter_google_migration_files from anon;
