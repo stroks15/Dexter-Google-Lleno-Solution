@@ -14,6 +14,9 @@ export default async function handler(req,res){
   if(job.status!=="verified"&&!job.delete_confirmation_at)return json(res,409,{error:"job_must_be_fully_verified_first"});
   const files=await sb("dexter_google_migration_files?select=id,source_file_id,status,source_service&job_id=eq."+encodeURIComponent(jobId)+"&user_id=eq."+encodeURIComponent(user.id)+"&status=eq.verified");
   if(!files.length)return json(res,409,{error:"no_verified_source_files_to_delete"});
+  const sourceCredentials=await sb("dexter_google_credentials?select=scopes&user_id=eq."+encodeURIComponent(user.id)+"&account_role=eq.account_source&revoked_at=is.null");
+  if(!sourceCredentials?.[0]?.scopes?.includes("https://www.googleapis.com/auth/drive"))
+    return json(res,409,{error:"reauthorize_source_for_deletion",message:"Drive source is read-only. Reauthorize only now, after verifying the destination, to grant deletion permission."});
   await sb("dexter_google_migration_jobs?id=eq."+encodeURIComponent(jobId),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({delete_confirmation_at:new Date().toISOString(),status:"delete_pending",updated_at:new Date().toISOString()})});
   const token=await getAccessToken("source",user.id);
   const results=[];
