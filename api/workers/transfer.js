@@ -16,10 +16,9 @@ async function retry(fn) {
   throw last;
 }
 async function tokenFor(role,userId) {
-  const rows=await sb("dexter_google_connections?select=id&user_id=eq."+encodeURIComponent(userId)+"&role=eq."+role+"&revoked_at=is.null");
-  if(!rows?.[0]) throw new Error("google_connection_missing:"+role);
-  const secrets=await sb("dexter_google_oauth_secrets?select=encrypted_refresh_token&connection_id=eq."+rows[0].id);
-  if(!secrets?.[0]) throw new Error("refresh_token_missing");
+  const accountRole=role==="source"?"account_source":"account_target";
+  const secrets=await sb("dexter_google_credentials?select=encrypted_refresh_token&user_id=eq."+encodeURIComponent(userId)+"&account_role=eq."+accountRole+"&revoked_at=is.null");
+  if(!secrets?.[0]) throw new Error("google_credential_missing:"+accountRole);
   const [version,iv,tag,ciphertext]=secrets[0].encrypted_refresh_token.split(".");
   if(version!=="v1") throw new Error("invalid_encrypted_token");
   const key=Buffer.from(env("OAUTH_TOKEN_ENCRYPTION_KEY"),"base64");
