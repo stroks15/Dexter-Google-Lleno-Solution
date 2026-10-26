@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101a33"><title>Espacio Google · Migración inteligente</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<header class="topbar"><div class="brand"><span class="brandmark">↗</span><span>espacio<span class="muted">google</span></span></div><span class="secure">● Privado y seguro</span></header>
+<main class="shell">
+<section class="intro"><p class="eyebrow">RECUPERA TU ESPACIO</p><h1>Tu espacio, de vuelta.<br><span>Sin perder tus recuerdos.</span></h1><p class="lede">Cuando tu cuenta se llena, Gmail puede dejar de recibir mensajes y los respaldos pueden detenerse. Copia tus archivos a otra cuenta y verifica todo antes de borrar el origen.</p>
+<div class="steps"><span class="step active"><b>1</b> Conecta</span><i></i><span class="step"><b>2</b> Selecciona</span><i></i><span class="step"><b>3</b> Verifica</span></div></section>
+<section class="panel accounts"><div class="panelhead"><div><p class="eyebrow">PASO 1 · CUENTAS</p><h2>Conecta tus cuentas Google</h2></div><span class="lock">⌑</span></div>
+<div class="account-grid"><article class="account source"><div class="gicon">G</div><div><strong>Cuenta 1 · Origen</strong><p>La cuenta que está llena</p><small>Permisos de lectura</small></div><button class="outline" data-connect="source">Conectar</button></article>
+<article class="account dest"><div class="gicon">G</div><div><strong>Cuenta 2 · Destino</strong><p>La cuenta con espacio libre</p><small>Permisos para copiar</small></div><button class="outline" data-connect="destination">Conectar</button></article></div>
+<p class="hint" id="connectionHint" role="status">Prototipo visual: los botones no inician sesión real hasta configurar OAuth.</p></section>
+<section class="panel"><div class="panelhead"><div><p class="eyebrow">PASO 2 · ELIGE QUÉ MOVER</p><h2>¿Qué quieres liberar?</h2></div><span class="count" id="selectedCount">0 seleccionados</span></div>
+<div class="modes" role="group" aria-label="Tipo de migración">
+<button class="mode selected" data-mode="all"><span>▦</span><b>Todo</b><small>Fotos, videos y Drive</small></button>
+<button class="mode" data-mode="photos_videos"><span>▧</span><b>Fotos y videos</b><small>Google Fotos</small></button>
+<button class="mode" data-mode="videos_only"><span>▷</span><b>Solo videos</b><small>Archivos de video</small></button>
+<button class="mode" data-mode="drive"><span>▤</span><b>Google Drive</b><small>Documentos y archivos</small></button>
+</div>
+<div class="storage"><div class="storage-top"><div><span class="eyebrow">ALMACENAMIENTO DE ORIGEN</span><h3><span id="usedLabel">14.8 GB</span> <small>usados (estimación)</small></h3></div><span class="quota">15 GB total</span></div>
+<div class="meter" role="progressbar" aria-label="Almacenamiento usado estimado" aria-valuemin="0" aria-valuemax="15" aria-valuenow="14.8" id="meter"><span class="used"></span><span class="recover"></span></div>
+<div class="legend"><span><i class="red"></i>Usado actualmente</span><span><i class="blue"></i>Seleccionado para liberar</span></div>
+<p class="hint">La barra azul muestra espacio potencial. El espacio real solo se libera tras verificar y confirmar el borrado.</p></div>
+<div class="file-head"><div><h3>Archivos más pesados</h3><p>Ejemplo interactivo · mayor a menor</p></div><button class="textbutton" id="toggleAll">Seleccionar todos</button></div>
+<div class="file-list" id="fileList"></div>
+<div class="selection-summary"><div><span class="eyebrow">POTENCIAL A LIBERAR</span><strong id="recoverLabel">0.0 GB</strong></div><div><span class="eyebrow">USO ESTIMADO DESPUÉS</span><strong id="afterLabel">14.8 GB</strong></div></div>
+<button class="primary" id="startButton">Continuar a la verificación <span>→</span></button><p class="hint" id="actionHint" role="status">Conecta ambas cuentas para iniciar una migración real.</p>
+</section>
+<section class="panel safety"><span class="safetyicon">✓</span><div><h3>Tus archivos no se borran automáticamente</h3><p>Primero se copian y verifican. Solo después de revisar tu cuenta de destino podrás confirmar, por separado, qué archivos verificados deseas eliminar de la cuenta de origen.</p></div></section>
+<footer>Diseñado para móvil y tablet · Nunca compartiremos tus archivos.</footer>
+</main><script src="./app.js"></script></body></html>
