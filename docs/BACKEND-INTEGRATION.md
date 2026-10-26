@@ -12,7 +12,7 @@
 
 ## Correct OAuth scopes
 
-The scope host must be `https://www.googleapis.com/auth/...`, not `https://googleapis.com`. Source Drive currently requests `drive` because the requested post-verification delete action needs delete capability; this is a powerful scope. Destination Drive requests `drive.file`. Photos scopes are requested separately, but the transfer enqueue endpoint intentionally rejects Photos jobs until the app's allowed Photos API methods and data-access policy have been validated. Do not imply that arbitrary Google Photos library items can be copied/deleted with the Drive API.
+The scope host must be `https://www.googleapis.com/auth/...`, not `https://googleapis.com`. Source Drive initially requests `drive.readonly`; destination Drive requests `drive.file`. Only after a job is fully verified and the user explicitly confirms deletion does the app ask Google for an additional `drive` scope, replacing the source token. Photos scopes are requested separately, but the transfer enqueue endpoint intentionally rejects Photos jobs until the app's allowed Photos API methods and data-access policy have been validated. Do not imply that arbitrary Google Photos library items can be copied/deleted with the Drive API.
 
 ## Required Vercel environment variables
 
