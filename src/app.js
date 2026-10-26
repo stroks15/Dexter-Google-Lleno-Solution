@@ -60,8 +60,7 @@ async function refreshAuth(){
   const result=await supabaseClient.auth.getSession();
   session=result.data.session;
   const signed=!!session;
-  byId("authEmail").disabled=signed;byId("authPassword").disabled=signed;
-  byId("signInButton").hidden=signed;byId("signUpButton").hidden=signed;byId("signOutButton").hidden=!signed;
+  byId("googleSignInButton").hidden=signed;byId("signOutButton").hidden=!signed;
   byId("authPanel").querySelector("h2").textContent=signed?"Sesión iniciada":"Inicia sesión para continuar";
   if(signed){setAuthHint("Sesión segura activa: "+(session.user.email||"usuario")+".");await refreshConnections().catch(e=>setAuthHint("Sesión activa; no se pudo consultar conexiones: "+e.message));}
   else{setAuthHint("Autenticación mediante Supabase. No introduzcas tu contraseña de Google aquí.");byId("connectionHint").textContent="Inicia sesión para conectar las cuentas Google."}
@@ -88,20 +87,19 @@ window.addEventListener("message",async event=>{
     finally{pendingDeleteConfirmation=null}
   }
 });
-byId("authForm").addEventListener("submit",async event=>{
-  event.preventDefault();
-  try{const email=byId("authEmail").value.trim(),password=byId("authPassword").value;
-    const result=await supabaseClient.auth.signInWithPassword({email,password});
+byId("googleSignInButton").addEventListener("click",async()=>{
+  try{
+    byId("googleSignInButton").disabled=true;
+    setAuthHint("Abriendo el acceso seguro de Google…");
+    const result=await supabaseClient.auth.signInWithOAuth({
+      provider:"google",
+      options:{redirectTo:window.location.origin+"/",queryParams:{access_type:"offline",prompt:"select_account"}}
+    });
     if(result.error)throw result.error;
-    await refreshAuth();
-  }catch(e){setAuthHint("No se pudo iniciar sesión: "+e.message)}
-});
-byId("signUpButton").addEventListener("click",async()=>{
-  try{const result=await supabaseClient.auth.signUp({email:byId("authEmail").value.trim(),password:byId("authPassword").value});
-    if(result.error)throw result.error;
-    setAuthHint(result.data.session?"Cuenta creada y sesión iniciada.":"Cuenta creada. Revisa tu correo para confirmar el registro.");
-    await refreshAuth();
-  }catch(e){setAuthHint("No se pudo crear la cuenta: "+e.message)}
+  }catch(e){
+    setAuthHint("No se pudo iniciar sesión con Google: "+e.message);
+    byId("googleSignInButton").disabled=false;
+  }
 });
 byId("signOutButton").addEventListener("click",async()=>{await supabaseClient.auth.signOut();session=null;selected.clear();files=[];renderFiles();await refreshAuth()});
 byId("scanButton").addEventListener("click",()=>scanFiles(false));
