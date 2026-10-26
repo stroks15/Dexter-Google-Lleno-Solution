@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import {apiError,baseUrl,env,json,method,redisSet,requireUser} from "../_lib/runtime.js";
 
-const DRIVE_SOURCE = ["https://www.googleapis.com/auth/drive.readonly","https://www.googleapis.com/auth/photoslibrary.readonly"];
+const DRIVE_SOURCE = ["https://www.googleapis.com/auth/drive.readonly","https://www.googleapis.com/auth/photospicker.mediaitems.readonly"];
 const DRIVE_TARGET = ["https://www.googleapis.com/auth/drive.file","https://www.googleapis.com/auth/photoslibrary.appendonly"];
 export default async function handler(req,res) {
   if (!method(req,res,["POST"])) return;
