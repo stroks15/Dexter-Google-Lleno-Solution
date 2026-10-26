@@ -1,4 +1,4 @@
-import {apiError,baseUrl,env,json,redis,requireUser,sb,encryptSecret} from "../../_lib/runtime.js";
+import {apiError,baseUrl,env,json,redis,sb,encryptSecret} from "../../_lib/runtime.js";
 
 export default async function handler(req,res) {
   if (req.method !== "GET") { res.setHeader("Allow","GET"); return json(res,405,{error:"method_not_allowed"}); }
@@ -11,10 +11,11 @@ export default async function handler(req,res) {
     if (!raw) return json(res,400,{error:"oauth_state_expired_or_invalid"});
     await redis(["DEL","dexter:oauth:state:"+state]);
     const stateData=typeof raw==="string"?JSON.parse(raw):raw;
-    // Bind callback to the same signed-in Supabase user. The browser must send the same
-    // Supabase access token as Authorization header; no user ID is trusted from query params.
-    const user=await requireUser(req);
-    if (user.id!==stateData.userId) return json(res,403,{error:"oauth_state_user_mismatch"});
+    // The one-time, high-entropy state was created only after validating the Supabase session.
+    // Google redirects the browser without the original Authorization header, so bind to the
+    // user recorded in that expiring state instead of expecting a bearer token on this callback.
+    const userId=stateData.userId;
+    if (!userId) return json(res,400,{error:"invalid_oauth_state"});
     const role=stateData.role;
     if (!["account_source","account_target"].includes(role)) return json(res,400,{error:"invalid_oauth_role"});
     const tokenResponse=await fetch("https://oauth2.googleapis.com/token",{
@@ -27,14 +28,12 @@ export default async function handler(req,res) {
     const info=await infoResponse.json();
     if (!infoResponse.ok || !info.sub || !info.email) return json(res,400,{error:"google_userinfo_failed"});
     const scopes=String(tokenData.scope||"").split(" ").filter(Boolean);
-    // Google may omit refresh_token on repeat consent. Require a fresh offline consent rather
-    // than replacing a working stored refresh token with an empty value.
     if (!tokenData.refresh_token) return json(res,409,{error:"refresh_token_missing_reconnect_with_consent"});
     const ciphertext=encryptSecret(tokenData.refresh_token);
     const roleMap={account_source:"source",account_target:"destination"};
     const connectionRows=await sb("dexter_google_connections?on_conflict=user_id,role",{
       method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=representation"},
-      body:JSON.stringify([{user_id:user.id,role:roleMap[role],google_subject:info.sub,email:info.email,scopes,revoked_at:null}])
+      body:JSON.stringify([{user_id:userId,role:roleMap[role],google_subject:info.sub,email:info.email,scopes,revoked_at:null}])
     });
     const connection=connectionRows?.[0];
     if (!connection?.id) throw new Error("connection_upsert_failed");
@@ -42,8 +41,6 @@ export default async function handler(req,res) {
       method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
       body:JSON.stringify([{connection_id:connection.id,encrypted_refresh_token:ciphertext,key_version:"aes-256-gcm-v1",updated_at:new Date().toISOString()}])
     });
-    // Keep OAuth tokens off the URL. Return a tiny success page; frontend can poll its
-    // authenticated connection-status endpoint after the popup closes.
     res.setHeader("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'");
     res.setHeader("Content-Type","text/html; charset=utf-8");
     return res.status(200).send("<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>Cuenta conectada</title><p>Cuenta Google conectada de forma segura. Puedes cerrar esta ventana.</p><script>if(window.opener){window.opener.postMessage({type:'google-oauth-complete',role:"+JSON.stringify(role)+"},location.origin)}setTimeout(()=>window.close(),900)</script>");
