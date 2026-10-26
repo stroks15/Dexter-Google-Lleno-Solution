@@ -5,6 +5,7 @@ let currentJobId = null;
 let supabaseClient = null;
 let session = null;
 let pollHandle = null;
+let pendingDeleteConfirmation = null;
 const list = document.querySelector("#fileList");
 const fmt = n => (Number(n||0)/1e9).toFixed(2)+" GB";
 const byId = id => document.getElementById(id);
@@ -79,6 +80,13 @@ document.querySelectorAll("[data-connect]").forEach(button=>button.addEventListe
 window.addEventListener("message",async event=>{
   if(event.origin!==window.location.origin||event.data?.type!=="google-oauth-complete")return;
   await refreshConnections().catch(e=>byId("connectionHint").textContent=e.message);
+  if(event.data.role==="account_source_delete"&&pendingDeleteConfirmation&&currentJobId){
+    try{
+      const result=await api("/api/migrations/confirm-delete",{method:"POST",body:JSON.stringify({jobId:currentJobId,confirmationText:pendingDeleteConfirmation})});
+      byId("deleteHint").textContent="Resultado del borrado: "+result.status+". Revisa los resultados individuales.";
+    }catch(e){byId("deleteHint").textContent="No se completó el borrado: "+e.message;byId("confirmDeleteButton").disabled=false}
+    finally{pendingDeleteConfirmation=null}
+  }
 });
 byId("authForm").addEventListener("submit",async event=>{
   event.preventDefault();
@@ -149,11 +157,27 @@ byId("confirmDeleteButton").addEventListener("click",async()=>{
   if(!window.confirm(warning))return;
   const typed=window.prompt('Para confirmar, escribe exactamente: ELIMINAR ARCHIVOS VERIFICADOS DE LA CUENTA 1');
   if(typed!=="ELIMINAR ARCHIVOS VERIFICADOS DE LA CUENTA 1")return;
+  const popup=window.open("about:blank","googleDeleteConsent","popup,width=520,height=720");
   try{
     byId("confirmDeleteButton").disabled=true;
     const result=await api("/api/migrations/confirm-delete",{method:"POST",body:JSON.stringify({jobId:currentJobId,confirmationText:typed})});
+    if(popup)popup.close();
     byId("deleteHint").textContent="Resultado del borrado: "+result.status+". Revisa los resultados individuales.";
-  }catch(e){byId("deleteHint").textContent="El borrado no se completó: "+e.message;byId("confirmDeleteButton").disabled=false}
+  }catch(e){
+    if(e.message.includes("reauthorize_source_for_deletion")){
+      try{
+        const consent=await api("/api/auth/google-delete-consent",{method:"POST",body:JSON.stringify({jobId:currentJobId,confirmationText:typed})});
+        if(!popup){byId("deleteHint").textContent="Permite la ventana emergente para autorizar el permiso de borrado.";byId("confirmDeleteButton").disabled=false;return}
+        pendingDeleteConfirmation=typed;
+        popup.location=consent.url;
+        byId("deleteHint").textContent="Autoriza el permiso de borrado en Google. Solo se solicitará después de verificar la copia.";
+      }catch(consentError){if(popup)popup.close();byId("deleteHint").textContent="No se pudo solicitar autorización: "+consentError.message;byId("confirmDeleteButton").disabled=false}
+    }else{
+      if(popup)popup.close();
+      byId("deleteHint").textContent="El borrado no se completó: "+e.message;
+      byId("confirmDeleteButton").disabled=false;
+    }
+  }
 });
 async function init(){
   try{
