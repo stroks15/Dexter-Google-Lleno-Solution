@@ -17,7 +17,7 @@ export default async function handler(req,res) {
     const userId=stateData.userId;
     if (!userId) return json(res,400,{error:"invalid_oauth_state"});
     const role=stateData.role;
-    if (!["account_source","account_target"].includes(role)) return json(res,400,{error:"invalid_oauth_role"});
+    if (!["account_source","account_target","account_source_delete"].includes(role)) return json(res,400,{error:"invalid_oauth_role"});
     const tokenResponse=await fetch("https://oauth2.googleapis.com/token",{
       method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},
       body:new URLSearchParams({code,client_id:env("GOOGLE_CLIENT_ID"),client_secret:env("GOOGLE_CLIENT_SECRET"),redirect_uri:baseUrl(req)+"/api/auth/callback/google",grant_type:"authorization_code"})
@@ -30,7 +30,7 @@ export default async function handler(req,res) {
     const scopes=String(tokenData.scope||"").split(" ").filter(Boolean);
     if (!tokenData.refresh_token) return json(res,409,{error:"refresh_token_missing_reconnect_with_consent"});
     const ciphertext=encryptSecret(tokenData.refresh_token);
-    const roleMap={account_source:"source",account_target:"destination"};
+    const roleMap={account_source:"source",account_target:"destination",account_source_delete:"source"};
     const connectionRows=await sb("dexter_google_connections?on_conflict=user_id,role",{
       method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=representation"},
       body:JSON.stringify([{user_id:userId,role:roleMap[role],google_subject:info.sub,email:info.email,scopes,revoked_at:null}])
@@ -39,7 +39,7 @@ export default async function handler(req,res) {
     if (!connection?.id) throw new Error("connection_upsert_failed");
     await sb("dexter_google_credentials?on_conflict=user_id,account_role",{
       method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
-      body:JSON.stringify([{user_id:userId,account_role:role,google_subject:info.sub,email:info.email,scopes,encrypted_refresh_token:ciphertext,encryption_version:"aes-256-gcm-v1",revoked_at:null,updated_at:new Date().toISOString()}])
+      body:JSON.stringify([{user_id:userId,account_role:role==="account_source_delete"?"account_source":role,google_subject:info.sub,email:info.email,scopes,encrypted_refresh_token:ciphertext,encryption_version:"aes-256-gcm-v1",revoked_at:null,updated_at:new Date().toISOString()}])
     });
     res.setHeader("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'");
     res.setHeader("Content-Type","text/html; charset=utf-8");
