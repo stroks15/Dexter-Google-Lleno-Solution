@@ -47,8 +47,13 @@ async function sourceChunk(fileId,token,start,end,total) {
   if(total>0 && bytes.length!==end-start+1)throw new Error("source_chunk_size_mismatch");
   return bytes;
 }
-async function startUpload(metadata,token) {
-  const r=await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size,md5Checksum,sha256Checksum",{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json","X-Upload-Content-Type":metadata.mimeType||"application/octet-stream"},body:JSON.stringify({name:metadata.name,mimeType:metadata.mimeType||"application/octet-stream"})});
+async function findExistingCopy(sourceId,token) {
+  const q="appProperties has { key='dexterSourceId' and value='"+sourceId+"' } and trashed = false";
+  const params=new URLSearchParams({q,spaces:"drive",pageSize:"1",fields:"files(id,name,mimeType,size,md5Checksum,sha256Checksum,appProperties)"});
+  return googleJson("https://www.googleapis.com/drive/v3/files?"+params.toString(),token);
+}
+async function startUpload(metadata,token,sourceId) {
+  const r=await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size,md5Checksum,sha256Checksum",{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json","X-Upload-Content-Type":metadata.mimeType||"application/octet-stream"},body:JSON.stringify({name:metadata.name,mimeType:metadata.mimeType||"application/octet-stream",appProperties:{dexterSourceId:sourceId}})});
   if(!r.ok){const t=await r.text();throw Object.assign(new Error("resumable_upload_init_failed:"+t.slice(0,150)),{status:r.status});}
   const location=r.headers.get("location");
   if(!location)throw new Error("google_resumable_upload_location_missing");
@@ -90,7 +95,17 @@ export default async function handler(req,res) {
         const meta=await retry(()=>googleJson("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(f.source_file_id)+"?fields=id,name,mimeType,size,md5Checksum,sha256Checksum",sourceToken));
         if(meta.size===undefined)throw new Error("native_google_workspace_export_not_supported_yet");
         const size=Number(meta.size);
-        const session=await retry(()=>startUpload(meta,targetToken));
+        const existing=await retry(()=>findExistingCopy(f.source_file_id,targetToken));
+        if(existing.files?.length){
+          const dest=existing.files[0];
+          const verified=Number(dest.size)===Number(meta.size)&&Boolean(meta.md5Checksum&&dest.md5Checksum&&meta.md5Checksum.toLowerCase()===dest.md5Checksum.toLowerCase());
+          if(!verified)throw new Error("existing_destination_copy_failed_integrity_check");
+          const now=new Date().toISOString();
+          await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:dest.id,status:"verified",destination_md5:dest.md5Checksum,verified_at:now,updated_at:now})});
+          await sb("dexter_google_transfer_logs?job_id=eq."+encodeURIComponent(jobId)+"&source_service=eq.drive&file_id=eq."+encodeURIComponent(f.source_file_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"verified",destination_file_id:dest.id,source_size_bytes:Number(meta.size),destination_size_bytes:Number(dest.size),source_checksum:meta.md5Checksum,destination_checksum:dest.md5Checksum,verified_at:now,updated_at:now})});
+          continue;
+        }
+        const session=await retry(()=>startUpload(meta,targetToken,f.source_file_id));
         const md5=crypto.createHash("md5");
         let offset=0;let finalData=null;
         if(size===0) {
