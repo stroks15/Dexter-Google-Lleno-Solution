@@ -1,0 +1,17 @@
+const demoFiles=[
+ {id:"a",name:"Video familiar 4K.mp4",type:"Video · Google Drive",gb:4.2,icon:"▷"},
+ {id:"b",name:"Respaldo de fotos 2023.zip",type:"Archivo · Google Drive",gb:3.1,icon:"▤"},
+ {id:"c",name:"Vacaciones — video.mov",type:"Video · Google Fotos",gb:2.4,icon:"▷"},
+ {id:"d",name:"Fotos originales",type:"Fotos · Google Fotos",gb:1.7,icon:"▧"},
+ {id:"e",name:"Documentos escaneados.pdf",type:"PDF · Google Drive",gb:0.8,icon:"▤"}
+];
+const selected=new Set(); let mode="all";
+const list=document.querySelector("#fileList");
+const fmt=n=>n.toFixed(1)+" GB";
+function renderFiles(){list.innerHTML="";demoFiles.filter(f=>mode!=="videos_only"||f.type.toLowerCase().includes("video")).forEach(f=>{const row=document.createElement("label");row.className="file";const cb=document.createElement("input");cb.type="checkbox";cb.checked=selected.has(f.id);cb.setAttribute("aria-label","Seleccionar "+f.name);cb.addEventListener("change",()=>{cb.checked?selected.add(f.id):selected.delete(f.id);update()});const icon=document.createElement("span");icon.className="fileicon";icon.textContent=f.icon;const meta=document.createElement("span");meta.className="filemeta";const name=document.createElement("strong");name.textContent=f.name;const type=document.createElement("small");type.textContent=f.type;meta.append(name,type);const size=document.createElement("span");size.className="filesize";size.textContent=fmt(f.gb);row.append(cb,icon,meta,size);list.append(row)})}
+function update(){const total=[...selected].reduce((sum,id)=>sum+(demoFiles.find(f=>f.id===id)?.gb||0),0);const freed=Math.min(total,14.8);document.querySelector("#selectedCount").textContent=selected.size+" seleccionados";document.querySelector("#recoverLabel").textContent=fmt(freed);document.querySelector("#afterLabel").textContent=fmt(Math.max(0,14.8-freed));document.querySelector("#usedLabel").textContent=fmt(Math.max(0,14.8-freed));const red=document.querySelector(".meter .used"),blue=document.querySelector(".meter .recover");red.style.width=(Math.max(0,14.8-freed)/15*100)+"%";blue.style.width=(freed/15*100)+"%";document.querySelector("#meter").setAttribute("aria-valuenow",Math.max(0,14.8-freed));document.querySelector("#toggleAll").textContent=selected.size===demoFiles.length?"Quitar selección":"Seleccionar todos"}
+document.querySelectorAll("[data-mode]").forEach(b=>b.addEventListener("click",()=>{mode=b.dataset.mode;document.querySelectorAll("[data-mode]").forEach(x=>x.classList.toggle("selected",x===b));renderFiles()}));
+document.querySelector("#toggleAll").addEventListener("click",()=>{if(selected.size===demoFiles.length)selected.clear();else demoFiles.forEach(f=>selected.add(f.id));renderFiles();update()});
+document.querySelectorAll("[data-connect]").forEach(b=>b.addEventListener("click",()=>{document.querySelector("#connectionHint").textContent="OAuth aún no está configurado. Este prototipo no solicita ni almacena credenciales."; }));
+document.querySelector("#startButton").addEventListener("click",()=>{document.querySelector("#actionHint").textContent=selected.size?"Selección de demostración lista. Conecta OAuth y el worker para iniciar copias reales; ningún archivo se ha movido ni borrado.":"Selecciona al menos un archivo de ejemplo para continuar."});
+renderFiles();update();
