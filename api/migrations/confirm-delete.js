@@ -11,7 +11,7 @@ export default async function handler(req,res){
   const jobs=await sb("dexter_google_migration_jobs?select=id,user_id,status,delete_confirmation_at&id=eq."+encodeURIComponent(jobId));
   const job=jobs?.[0];
   if(!job||job.user_id!==user.id)return json(res,404,{error:"job_not_found"});
-  if(job.status!=="verified"&&!job.delete_confirmation_at)return json(res,409,{error:"job_must_be_fully_verified_first"});
+  if(job.status!=="verified")return json(res,409,{error:"job_must_be_fully_verified_first"});
   const files=await sb("dexter_google_migration_files?select=id,source_file_id,status,source_service,destination_file_id,size_bytes,destination_md5&job_id=eq."+encodeURIComponent(jobId)+"&user_id=eq."+encodeURIComponent(user.id)+"&status=eq.verified");
   if(!files.length)return json(res,409,{error:"no_verified_source_files_to_delete"});
   const sourceCredentials=await sb("dexter_google_credentials?select=scopes&user_id=eq."+encodeURIComponent(user.id)+"&account_role=eq.account_source&revoked_at=is.null");
