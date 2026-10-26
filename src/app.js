@@ -153,7 +153,7 @@ async function pollProgress(){
 }
 byId("confirmDeleteButton").addEventListener("click",async()=>{
   if(!session||!currentJobId)return;
-  const warning="Entra a tu cuenta de Google número 2 y revisa en Fotos y Drive que todos tus archivos estén completos para tu mayor seguridad. Una vez que verifiques que todo está completo y sin errores, presiona aquí para eliminar los archivos copiados de la cuenta 1";
+  const warning="Entra a tu cuenta de Google número 2 y revisa en Drive que todos los archivos seleccionados estén completos para tu mayor seguridad. Una vez que verifiques que todo está completo y sin errores, presiona aquí para eliminar los archivos copiados de la cuenta 1";
   if(!window.confirm(warning))return;
   const typed=window.prompt('Para confirmar, escribe exactamente: ELIMINAR ARCHIVOS VERIFICADOS DE LA CUENTA 1');
   if(typed!=="ELIMINAR ARCHIVOS VERIFICADOS DE LA CUENTA 1")return;
