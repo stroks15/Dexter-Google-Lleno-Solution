@@ -1,4 +1,4 @@
--- Storage migration foundation. Tokens are encrypted by the server before persistence.
+-- Storage migration foundation. OAuth secrets are server-only and envelope-encrypted.
 create extension if not exists pgcrypto;
 
 create type public.migration_status as enum (
@@ -12,11 +12,17 @@ create table public.google_connections (
   google_subject text not null,
   email text not null,
   scopes text[] not null default '{}',
-  encrypted_refresh_token bytea,
-  token_key_version text,
   connected_at timestamptz not null default now(),
   revoked_at timestamptz,
   unique(user_id, role)
+);
+
+-- Backend-only secrets table. No browser role receives grants; service role access only.
+create table public.google_oauth_secrets (
+  connection_id uuid primary key references public.google_connections(id) on delete cascade,
+  encrypted_refresh_token bytea not null,
+  key_version text not null,
+  updated_at timestamptz not null default now()
 );
 
 create table public.migration_jobs (
@@ -63,17 +69,15 @@ create index migration_files_job_status_idx on public.migration_files(job_id, st
 create index migration_files_largest_idx on public.migration_files(job_id, size_bytes desc);
 
 alter table public.google_connections enable row level security;
+alter table public.google_oauth_secrets enable row level security;
 alter table public.migration_jobs enable row level security;
 alter table public.migration_files enable row level security;
 
 create policy "users manage own google connections" on public.google_connections
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "users manage own migration jobs" on public.migration_jobs
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "users manage own migration files" on public.migration_files
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- Never expose refresh tokens to browser clients. Store only envelope-encrypted tokens
--- from a trusted backend; do not place the encryption key in this database.
-revoke all on public.google_connections from anon, authenticated;
-grant select, insert, update, delete on public.google_connections to authenticated;
+revoke all on public.google_oauth_secrets from anon, authenticated;
