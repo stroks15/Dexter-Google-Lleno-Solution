@@ -102,6 +102,8 @@ export default async function handler(req,res) {
           const now=new Date().toISOString();
           await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:dest.id,status:"verified",destination_md5:dest.md5Checksum,verified_at:now,updated_at:now})});
           await sb("dexter_google_transfer_logs?job_id=eq."+encodeURIComponent(jobId)+"&source_service=eq.drive&file_id=eq."+encodeURIComponent(f.source_file_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"verified",destination_file_id:dest.id,source_size_bytes:Number(meta.size),destination_size_bytes:Number(dest.size),source_checksum:meta.md5Checksum,destination_checksum:dest.md5Checksum,verified_at:now,updated_at:now})});
+          processed+=Number(meta.size||0);
+          await setProgress(jobId,processed,total,start,"copying");
           continue;
         }
         const session=await retry(()=>startUpload(meta,targetToken,f.source_file_id));
