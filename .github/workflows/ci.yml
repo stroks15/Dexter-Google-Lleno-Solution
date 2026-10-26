@@ -11,9 +11,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate prototype JavaScript
+      - name: Validate frontend JavaScript
         run: node --check src/app.js
-      - name: Validate JSON config
-        run: node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8'))"
+      - name: Validate serverless JavaScript modules
+        run: |
+          find api -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Validate JSON configuration
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
       - name: Check required files
-        run: test -s src/index.html && test -s supabase/migrations/202610260001_storage_migration.sql
+        run: |
+          test -s src/index.html
+          test -s supabase/migrations/202610260001_storage_migration.sql
+          test -s supabase/migrations/20261026150000_dexter_google_credentials_and_transfer_logs.sql
+          test -s android-template/app/src/main/AndroidManifest.xml
