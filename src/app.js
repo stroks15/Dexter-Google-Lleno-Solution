@@ -146,7 +146,7 @@ async function scanFiles(loadMore){
     const path="/api/migrations/scan"+(loadMore&&nextPageToken?"?pageToken="+encodeURIComponent(nextPageToken):"");
     const result=await api(path);
     if(!loadMore){files=[];selected.clear()}
-    files.push(...result.files);nextPageToken=result.nextPageToken;currentSourceService="drive";currentSourceService="drive";
+    files.push(...result.files);nextPageToken=result.nextPageToken;currentSourceService="drive";
     byId("loadMoreButton").hidden=!nextPageToken;
     byId("actionHint").textContent=files.length+" archivos de Drive cargados. Selecciona los que quieras copiar.";
     renderFiles();
@@ -192,6 +192,7 @@ async function pollProgress(){
 }
 byId("confirmDeleteButton").addEventListener("click",async()=>{
   if(!session||!currentJobId)return;
+  if(currentJobService==="photos"){byId("deleteHint").textContent="Google Photos no permite borrar automáticamente los originales seleccionados mediante esta API. Verifica la copia y gestiona el borrado manualmente en Google Fotos.";return;}
   const warning="Entra a tu cuenta de Google número 2 y revisa en Drive que todos los archivos seleccionados estén completos para tu mayor seguridad. Una vez que verifiques que todo está completo y sin errores, presiona aquí para eliminar los archivos copiados de la cuenta 1";
   if(!window.confirm(warning))return;
   const typed=window.prompt('Para confirmar, escribe exactamente: ELIMINAR ARCHIVOS VERIFICADOS DE LA CUENTA 1');
