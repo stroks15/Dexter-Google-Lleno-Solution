@@ -7,8 +7,8 @@
 - `GET /api/auth/connections`: safe connection metadata only.
 - `POST /api/migrations/enqueue`: creates a migration job, rows and idempotency logs, then publishes to QStash when configured.
 - `POST /api/workers/transfer`: protected QStash worker for Drive; transfers files in resumable 8 MiB chunks and verifies destination size plus MD5 before marking verified.
-- `POST /api/photos/session` and `GET /api/photos/session?sessionId=...`: create a Google Photos Picker session and poll for the user selection.
-- `POST /api/photos/transfer`: protected QStash worker that copies selected Picker items into the destination Google Photos library using the append-only Photos Library API. Current worker cap: 50 MiB per item.
+- `POST /api/migrations/scan?service=photos` and `GET /api/migrations/scan?service=photos&sessionId=...`: create a Google Photos Picker session and poll/list the user selection.
+- `POST /api/workers/transfer`: the same protected QStash worker dispatches Drive jobs or Google Photos Picker jobs; Photos copies selected media into the destination library using `photoslibrary.appendonly`, with a 50 MiB per-item cap.
 - `GET /api/migrations/progress?jobId=...`: reads job and Redis progress for the signed-in owner.
 - `POST /api/migrations/confirm-delete`: requires the exact explicit confirmation string and deletes only source Drive IDs whose records are verified.
 
