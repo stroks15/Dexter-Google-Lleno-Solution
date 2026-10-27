@@ -1,6 +1,9 @@
 const selected = new Map();
 let files = [];
-let nextPageToken = null;\nlet photosSessionId = null;\nlet currentSourceService = "drive";\nlet currentJobService = "drive";
+let nextPageToken = null;
+let photosSessionId = null;
+let currentSourceService = "drive";
+let currentJobService = "drive";
 let currentJobId = null;
 let supabaseClient = null;
 let session = null;
@@ -8,7 +11,8 @@ let pollHandle = null;
 let pendingDeleteConfirmation = null;
 const list = document.querySelector("#fileList");
 const fmt = n => (Number(n||0)/1e9).toFixed(2)+" GB";
-const byId = id => document.getElementById(id);\nconst keyFor = f => f.service+":"+f.fileId;
+const byId = id => document.getElementById(id);
+const keyFor = f => f.service+":"+f.fileId;
 async function api(path, options={}) {
   const headers = {"Content-Type":"application/json",...(options.headers||{})};
   if(session?.access_token) headers.Authorization="Bearer "+session.access_token;
@@ -142,7 +146,7 @@ async function scanFiles(loadMore){
     const path="/api/migrations/scan"+(loadMore&&nextPageToken?"?pageToken="+encodeURIComponent(nextPageToken):"");
     const result=await api(path);
     if(!loadMore){files=[];selected.clear()}
-    files.push(...result.files);nextPageToken=result.nextPageToken;currentSourceService="drive";
+    files.push(...result.files);nextPageToken=result.nextPageToken;currentSourceService="drive";currentSourceService="drive";
     byId("loadMoreButton").hidden=!nextPageToken;
     byId("actionHint").textContent=files.length+" archivos de Drive cargados. Selecciona los que quieras copiar.";
     renderFiles();
@@ -159,12 +163,16 @@ document.querySelectorAll("[data-mode]").forEach(button=>button.addEventListener
   else if(button.dataset.mode==="drive"){byId("actionHint").textContent="Escanea Google Drive para elegir archivos.";}
   else if(button.dataset.mode==="all"){byId("actionHint").textContent="Drive y Fotos se procesan en tareas separadas; elige una fuente cada vez.";}
   else byId("actionHint").textContent="Elige los elementos con el selector oficial de Google Fotos y luego selecciona fotos o videos.";
-}));\nbyId("startButton").addEventListener("click",async()=>{
+}));
+byId("startButton").addEventListener("click",async()=>{
   if(!session){byId("actionHint").textContent="Inicia sesión primero.";return}
   if(!selected.size){byId("actionHint").textContent="Escanea Drive y selecciona al menos un archivo real.";return}
   try{
     byId("startButton").disabled=true;byId("actionHint").textContent="Creando tarea de migración…";
-    const service=[...selected.values()][0]?.service||currentSourceService;\n    if([...selected.values()].some(f=>f.service!==service))throw new Error("Selecciona archivos de Drive o Google Fotos, no mezcles fuentes en una tarea.");\n    currentJobService=service;\n    const result=await api("/api/migrations/enqueue",{method:"POST",body:JSON.stringify({mode:service==="photos"?"photos_videos":"drive",photosSessionId:service==="photos"?photosSessionId:undefined,files:[...selected.values()].map(f=>({fileId:f.fileId,name:f.name,mimeType:f.mimeType,sizeBytes:f.sizeBytes,service}))})});
+    const service=[...selected.values()][0]?.service||currentSourceService;
+    if([...selected.values()].some(f=>f.service!==service))throw new Error("Selecciona archivos de Drive o Google Fotos, no mezcles fuentes en una tarea.");
+    currentJobService=service;
+    const result=await api("/api/migrations/enqueue",{method:"POST",body:JSON.stringify({mode:service==="photos"?"photos_videos":"drive",photosSessionId:service==="photos"?photosSessionId:undefined,files:[...selected.values()].map(f=>({fileId:f.fileId,name:f.name,mimeType:f.mimeType,sizeBytes:f.sizeBytes,service}))})});
     currentJobId=result.jobId;byId("progressPanel").hidden=false;byId("progressText").textContent="Migración: "+result.status;byId("deleteHint").textContent="La verificación se realizará antes de habilitar el borrado.";
     pollProgress();
   }catch(e){byId("actionHint").textContent="No se pudo iniciar: "+e.message}
