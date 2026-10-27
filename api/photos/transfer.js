@@ -50,7 +50,7 @@ export default async function handler(req,res){
     if(declared>MAX_BYTES)throw new Error("photos_item_exceeds_50mb_function_limit_use_drive_export_or_split_selection");
     const bytes=await readLimited(download,MAX_BYTES);
     if(!bytes.length)throw new Error("photos_media_empty");
-    const upload=await fetch("https://photoslibrary.googleapis.com/v1/uploads",{method:"POST",headers:{Authorization:"Bearer "+targetToken,"Content-Type":"application/octet-stream","X-Goog-Upload-Content-Type":mf.mimeType,"X-Goog-Upload-Protocol":"raw","X-Goog-Upload-File-Name":String(mf.filename||f.file_name||"photo").replace(/[\\r\\n]/g,"_")},body:bytes});
+    const upload=await fetch("https://photoslibrary.googleapis.com/v1/uploads",{method:"POST",headers:{Authorization:"Bearer "+targetToken,"Content-Type":"application/octet-stream","X-Goog-Upload-Content-Type":mf.mimeType,"X-Goog-Upload-Protocol":"raw","X-Goog-Upload-File-Name":String(mf.filename||f.file_name||"photo").replaceAll(String.fromCharCode(13),"_").replaceAll(String.fromCharCode(10),"_")},body:bytes});
     if(!upload.ok)throw Object.assign(new Error("photos_upload_bytes_failed:"+upload.status+":"+await googleError(upload)),{status:upload.status});
     const uploadToken=(await upload.text()).trim();
     if(!uploadToken)throw new Error("photos_upload_token_missing");
@@ -71,7 +71,7 @@ export default async function handler(req,res){
   const pending=await sb("dexter_google_migration_files?select=status&job_id=eq."+encodeURIComponent(jobId)+"&status=not.in.(verified,deleted)");
   const complete=!pending?.length&&!failed;
   const now=new Date().toISOString();
-  await sb("dexter_google_migration_jobs?id=eq."+encodeURIComponent(jobId),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:complete?"verified":"failed",processed_bytes:processed,verified_bytes:processed,updated_at:now})});
+  await sb("dexter_google_migration_jobs?id=eq."+encodeURIComponent(jobId),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:complete?"verified":"failed",processed_bytes:processed,verified_bytes:processed,total_bytes:total,updated_at:now})});
   await redisSet("migration:progress:"+jobId,{jobId,percent:complete?100:0,remainingSeconds:0,processedBytes:processed,totalBytes:total,status:complete?"verified":"failed"},86400);
   return json(res,200,{jobId,status:complete?"verified":"failed",processedBytes:processed,deleteRequiresConfirmation:false,photosOriginalsRemain:true});
  }catch(e){return apiError(res,e)}
