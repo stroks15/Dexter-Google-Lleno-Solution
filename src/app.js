@@ -142,15 +142,26 @@ async function startPhotosPicker(){
 async function scanFiles(loadMore){
   if(!session){byId("actionHint").textContent="Inicia sesión primero.";return}
   try{
-    byId("scanButton").disabled=true;byId("loadMoreButton").disabled=true;byId("actionHint").textContent="Consultando archivos reales de Google Drive…";
-    const path="/api/migrations/scan"+(loadMore&&nextPageToken?"?pageToken="+encodeURIComponent(nextPageToken):"");
-    const result=await api(path);
-    if(!loadMore){files=[];selected.clear()}
-    files.push(...result.files);nextPageToken=result.nextPageToken;currentSourceService="drive";
-    byId("loadMoreButton").hidden=!nextPageToken;
-    byId("actionHint").textContent=files.length+" archivos de Drive cargados. Selecciona los que quieras copiar.";
+    byId("scanButton").disabled=true;byId("loadMoreButton").disabled=true;
+    if(currentSourceService==="photos"&&photosSessionId){
+      byId("actionHint").textContent="Cargando más elementos seleccionados de Google Fotos…";
+      const path="/api/photos/session?sessionId="+encodeURIComponent(photosSessionId)+(loadMore&&nextPageToken?"&pageToken="+encodeURIComponent(nextPageToken):"");
+      const result=await api(path);
+      if(!result.ready)throw new Error("La selección de Google Fotos todavía no está lista.");
+      files.push(...(result.items||[]));nextPageToken=result.nextPageToken||null;
+      byId("loadMoreButton").hidden=!nextPageToken;
+      byId("actionHint").textContent=files.length+" elementos seleccionados desde Google Fotos.";
+    }else{
+      byId("actionHint").textContent="Consultando archivos reales de Google Drive…";
+      const path="/api/migrations/scan"+(loadMore&&nextPageToken?"?pageToken="+encodeURIComponent(nextPageToken):"");
+      const result=await api(path);
+      if(!loadMore){files=[];selected.clear()}
+      files.push(...result.files);nextPageToken=result.nextPageToken;currentSourceService="drive";
+      byId("loadMoreButton").hidden=!nextPageToken;
+      byId("actionHint").textContent=files.length+" archivos de Drive cargados. Selecciona los que quieras copiar.";
+    }
     renderFiles();
-  }catch(e){byId("actionHint").textContent="No se pudo escanear Drive: "+e.message}
+  }catch(e){byId("actionHint").textContent="No se pudieron cargar los archivos: "+e.message}
   finally{byId("scanButton").disabled=false;byId("loadMoreButton").disabled=false}
 }
 byId("toggleAll").addEventListener("click",()=>{
