@@ -115,7 +115,7 @@ async function startPhotosPicker(){
  try{
   byId("selectPhotosButton").disabled=true;
   byId("photosHint").textContent="Creando sesión segura de Google Fotos…";
-  const result=await api("/api/photos/session",{method:"POST",body:JSON.stringify({})});
+  const result=await api("/api/migrations/scan?service=photos",{method:"POST",body:JSON.stringify({service:"photos"})};
   photosSessionId=result.sessionId;
   if(popup)popup.location=result.pickerUri;else window.open(result.pickerUri,"_blank","noopener");
   byId("photosHint").textContent="Selecciona fotos y videos en Google Fotos. Esta página esperará a que termines…";
@@ -123,7 +123,7 @@ async function startPhotosPicker(){
   let readyResult=null;
   while(Date.now()<deadline){
    await new Promise(resolve=>setTimeout(resolve,3000));
-   const status=await api("/api/photos/session?sessionId="+encodeURIComponent(photosSessionId));
+   const status=await api("/api/migrations/scan?service=photos&sessionId="+encodeURIComponent(photosSessionId));
    if(status.ready){readyResult=status;break}
   }
   if(!readyResult)throw new Error("No se detectó la selección. Vuelve a abrir el selector e inténtalo de nuevo.");
@@ -145,7 +145,7 @@ async function scanFiles(loadMore){
     byId("scanButton").disabled=true;byId("loadMoreButton").disabled=true;
     if(currentSourceService==="photos"&&photosSessionId){
       byId("actionHint").textContent="Cargando más elementos seleccionados de Google Fotos…";
-      const path="/api/photos/session?sessionId="+encodeURIComponent(photosSessionId)+(loadMore&&nextPageToken?"&pageToken="+encodeURIComponent(nextPageToken):"");
+      const path="/api/migrations/scan?service=photos&sessionId="+encodeURIComponent(photosSessionId)+(loadMore&&nextPageToken?"&pageToken="+encodeURIComponent(nextPageToken):"");
       const result=await api(path);
       if(!result.ready)throw new Error("La selección de Google Fotos todavía no está lista.");
       files.push(...(result.items||[]));nextPageToken=result.nextPageToken||null;
