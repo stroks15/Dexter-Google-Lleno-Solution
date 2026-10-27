@@ -100,7 +100,7 @@ export default async function handler(req,res) {
           const verified=Number(dest.size)===Number(meta.size)&&Boolean(meta.md5Checksum&&dest.md5Checksum&&meta.md5Checksum.toLowerCase()===dest.md5Checksum.toLowerCase());
           if(!verified)throw new Error("existing_destination_copy_failed_integrity_check");
           const now=new Date().toISOString();
-          await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:dest.id,status:"verified",destination_md5:dest.md5Checksum,verified_at:now,updated_at:now})});
+          await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:dest.id,status:"verified",source_md5:meta.md5Checksum,destination_md5:dest.md5Checksum,verified_at:now,updated_at:now})});
           await sb("dexter_google_transfer_logs?job_id=eq."+encodeURIComponent(jobId)+"&source_service=eq.drive&file_id=eq."+encodeURIComponent(f.source_file_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"verified",destination_file_id:dest.id,source_size_bytes:Number(meta.size),destination_size_bytes:Number(dest.size),source_checksum:meta.md5Checksum,destination_checksum:dest.md5Checksum,verified_at:now,updated_at:now})});
           processed+=Number(meta.size||0);
           await setProgress(jobId,processed,total,start,"copying");
@@ -127,6 +127,7 @@ export default async function handler(req,res) {
         const dest=await retry(()=>googleJson("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(finalData?.id||"") +"?fields=id,name,mimeType,size,md5Checksum,sha256Checksum",targetToken));
         const sizeOk=Number(dest.size)===size;
         const hashOk=Boolean(meta.md5Checksum && dest.md5Checksum && meta.md5Checksum.toLowerCase()===dest.md5Checksum.toLowerCase());
+        if(!finalData?.id)throw new Error("destination_upload_not_finalized");
         if(!sizeOk||!hashOk)throw new Error("destination_integrity_verification_failed");
         const now=new Date().toISOString();
         await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:dest.id,status:"verified",destination_md5:dest.md5Checksum,verified_at:now,updated_at:now})});
