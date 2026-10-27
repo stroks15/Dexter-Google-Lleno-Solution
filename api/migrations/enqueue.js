@@ -4,6 +4,7 @@ export default async function handler(req,res) {
   if (!method(req,res,["POST"])) return;
   try {
     const user=await requireUser(req);
+    if (!process.env.QSTASH_TOKEN || !process.env.WORKER_SHARED_SECRET || !process.env.APP_BASE_URL) return json(res,503,{error:"background_queue_not_configured"});
     const {mode="drive",files=[],photosSessionId}=req.body||{};
     if (!["drive","all","photos_videos","videos_only","largest"].includes(mode)) return json(res,400,{error:"invalid_mode"});
     if (!Array.isArray(files)||files.length<1||files.length>1000) return json(res,400,{error:"files_must_contain_1_to_1000_items"});
@@ -42,7 +43,6 @@ export default async function handler(req,res) {
     await redisSet("migration:progress:"+jobId,{jobId,percent:0,remainingSeconds:null,status:"queued",processedBytes:0,totalBytes:normalized.reduce((n,f)=>n+f.sizeBytes,0)},86400);
     if(service==="photos")await redisSet("migration:photos-session:"+jobId,{userId:user.id,sessionId:photosSessionId},3600);
     const qstashToken=process.env.QSTASH_TOKEN;
-    if (!qstashToken) return json(res,202,{jobId,status:"queued_database_only",note:"QSTASH_TOKEN is not configured; queue delivery is not active yet."});
     const base=env("APP_BASE_URL").replace(/\/$/,"");
     const workerPath="/api/workers/transfer";
     const publish=await fetch("https://qstash.upstash.io/v2/publish/"+encodeURIComponent(base+workerPath),{
