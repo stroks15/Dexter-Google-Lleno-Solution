@@ -37,11 +37,13 @@ export default async function handler(req,res) {
     await sb("dexter_google_migration_files",{method:"POST",headers:{"Prefer":"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify(rows)});
     const logs=normalized.map(f=>({user_id:user.id,job_id:jobId,file_id:f.fileId,source_service:service,status:"queued",source_size_bytes:f.sizeBytes}));
     await sb("dexter_google_transfer_logs",{method:"POST",headers:{"Prefer":"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify(logs)});
-    await redisSet("migration:progress:"+jobId,{jobId,percent:0,remainingSeconds:null,status:"queued",processedBytes:0,totalBytes:normalized.reduce((n,f)=>n+f.sizeBytes,0)},86400);\n    if(service==="photos")await redisSet("migration:photos-session:"+jobId,{userId:user.id,sessionId:photosSessionId},3600);
+    await redisSet("migration:progress:"+jobId,{jobId,percent:0,remainingSeconds:null,status:"queued",processedBytes:0,totalBytes:normalized.reduce((n,f)=>n+f.sizeBytes,0)},86400);
+    if(service==="photos")await redisSet("migration:photos-session:"+jobId,{userId:user.id,sessionId:photosSessionId},3600);
     const qstashToken=process.env.QSTASH_TOKEN;
     if (!qstashToken) return json(res,202,{jobId,status:"queued_database_only",note:"QSTASH_TOKEN is not configured; queue delivery is not active yet."});
     const base=env("APP_BASE_URL").replace(/\/$/,"");
-    const workerPath=service==="photos"?"/api/photos/transfer":"/api/workers/transfer";\n    const publish=await fetch("https://qstash.upstash.io/v2/publish/"+encodeURIComponent(base+workerPath),{
+    const workerPath=service==="photos"?"/api/photos/transfer":"/api/workers/transfer";
+    const publish=await fetch("https://qstash.upstash.io/v2/publish/"+encodeURIComponent(base+workerPath),{
       method:"POST",headers:{Authorization:"Bearer "+qstashToken,"Content-Type":"application/json","Upstash-Forward-Authorization":"Bearer "+env("WORKER_SHARED_SECRET")},
       body:JSON.stringify({jobId,userId:user.id})
     });
