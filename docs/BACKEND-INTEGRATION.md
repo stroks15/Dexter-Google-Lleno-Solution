@@ -6,9 +6,9 @@
 - `GET /api/auth/callback/google`: exchanges OAuth code, verifies Google identity, encrypts refresh token with AES-256-GCM, and stores it in the server-only Supabase secret table.
 - `GET /api/auth/connections`: safe connection metadata only.
 - `POST /api/migrations/enqueue`: creates a migration job, rows and idempotency logs, then publishes to QStash when configured.
-- `POST /api/workers/transfer`: protected QStash worker for Drive; transfers files in resumable 8 MiB chunks and verifies destination size plus MD5 before marking verified.
+- POST /api/workers/transfer: protected QStash worker; handles one bounded 4 MiB chunk per invocation, persists resumable upload sessions and offsets in Upstash Redis, then schedules the next chunk through QStash. Drive destination size and MD5 are checked before marking verified.
 - `POST /api/migrations/scan?service=photos` and `GET /api/migrations/scan?service=photos&sessionId=...`: create a Google Photos Picker session and poll/list the user selection.
-- `POST /api/workers/transfer`: the same protected QStash worker dispatches Drive jobs or Google Photos Picker jobs; Photos copies selected media into the destination library using `photoslibrary.appendonly`, with a 50 MiB per-item cap.
+- Google Photos Picker jobs use the same durable worker and Google Photos resumable uploads. Each invocation streams one byte range to the destination without buffering the whole media item. Source byte-range support is validated at runtime; if unavailable or the Picker session expires, the item fails safely instead of loading the full file into memory.
 - `GET /api/migrations/progress?jobId=...`: reads job and Redis progress for the signed-in owner.
 - `POST /api/migrations/confirm-delete`: requires the exact explicit confirmation string and deletes only source Drive IDs whose records are verified.
 
@@ -39,3 +39,5 @@ This repository's current UI is a static site in `src`; the manifest template is
 5. Build the signed APK/AAB in Android Studio.
 
 The `WAKE_LOCK` permission alone does not guarantee an always-awake device; use a foreground service or carefully scoped wake lock in native code if background transfers must continue with the screen off. Android background execution restrictions still apply.
+
+See [DURABLE-TRANSFER-ARCHITECTURE.md](./DURABLE-TRANSFER-ARCHITECTURE.md) for Redis state keys, retries, streaming limitations and the distinction between bounded bandwidth/memory and zero Vercel egress.
