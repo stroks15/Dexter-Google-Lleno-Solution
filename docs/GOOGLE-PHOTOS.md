@@ -1,16 +1,21 @@
-# Google Photos Picker migration
+# Google Photos: Partner Sharing sin intermediación binaria
 
-This flow uses Google's Picker API for user-selected source media and the Photos Library API only to append new media to the destination account.
+## Arquitectura
+- Vercel sirve la interfaz estática y endpoints ligeros de autenticación, metadatos y estado.
+- Ninguna ruta descarga, bufferiza, fragmenta o sube archivos binarios.
+- La aplicación no usa Picker API para copiar medios ni Photos Library API para subirlos.
+- El usuario invita la Cuenta 2 desde Partner Sharing de la Cuenta 1; acepta en la Cuenta 2 y activa Guardar en tu cuenta → Todas las fotos, si quiere guardar todo lo compartido.
+- La aplicación registra el proceso, pero no puede configurar Partner Sharing ni verificar la biblioteca completa por API.
 
-## User flow
-1. Connect the source account with `photospicker.mediaitems.readonly`.
-2. Create a Picker session at `POST /api/migrations/scan?service=photos` and open the returned `pickerUri`.
-3. Poll `GET /api/migrations/scan?service=photos&sessionId=...` until `ready=true`; this endpoint returns the selected media IDs.
-4. Queue the selected IDs with `POST /api/migrations/enqueue`, mode `photos_videos`, and `photosSessionId`.
-5. The shared protected `/api/workers/transfer` worker downloads selected media and creates destination items using `photoslibrary.appendonly`.
+## Verificación y borrado
+La API pública de Google Photos no proporciona un inventario completo de ambas bibliotecas que permita verificar una copia exacta de cada elemento. Nombre, tamaño y fecha no prueban identidad binaria. El endpoint de verificación devuelve MANUAL_VERIFICATION_REQUIRED, verified=false y safeToDelete=false. Nunca declara SAFE_TO_DELETE ni habilita borrado automático.
 
-## Important constraints
-- This implementation intentionally caps each item at 50 MiB because the current Vercel function buffers one item in memory. Larger videos must not be queued through this path until a streaming/resumable worker is deployed.
-- Google Photos APIs do not provide a supported general-purpose delete operation for arbitrary existing library items. This flow copies selected media and records successful item creation returned by Google Photos; the Picker API does not provide a source checksum for byte-for-byte verification in this implementation. It never deletes originals. To free Photos storage, review the destination manually first, then delete the originals manually in Google Photos.
-- Picker media URLs expire. Start the queued transfer promptly after selection.
-- Google OAuth consent screen / verification and API access must be approved/configured for the Google accounts used. The API being enabled alone does not guarantee access.
+Google indica que los elementos guardados antes de que el colaborador elimine los originales permanecen en la biblioteca destino. Sin embargo, no cuentan contra la cuota del destino mientras el origen continúe compartiéndolos. Partner Sharing no debe describirse como una copia independiente que siempre libera cuota de destino.
+
+## Rutas
+- POST /api/migrations/partner-sharing: crea registro del proceso.
+- POST /api/migrations/verify con jobId: registra revisión manual; no verifica ni autoriza borrado.
+- GET /api/migrations/scan: lista metadatos de Drive únicamente. service=photos responde que se requiere Partner Sharing.
+- GET /api/migrations/progress: lectura del estado del trabajo.
+
+La eliminación de originales de Google Fotos es siempre manual y queda fuera de esta aplicación.
