@@ -25,7 +25,7 @@ function setAuthHint(message){byId("authHint").textContent=message}
 function updateSummary(){
   const total=[...selected.values()].reduce((sum,f)=>sum+Number(f.sizeBytes||0),0);
   byId("selectedCount").textContent=selected.size+" seleccionados";
-  byId("recoverLabel").textContent=fmt(total);
+  byId("recoverLabel").textContent=[...selected.values()].some(f=>f.service==="photos"&&!Number(f.sizeBytes))?"Se calcula al copiar":fmt(total);
   byId("afterLabel").textContent="se calcula tras verificar";
   byId("usedLabel").textContent="—";
   byId("toggleAll").textContent=selected.size===files.length&&files.length?"Quitar selección":"Seleccionar todos";
@@ -42,7 +42,7 @@ function renderFiles(){
     const name=document.createElement("strong");name.textContent=f.name;
     const type=document.createElement("small");type.textContent=(f.mimeType||"Archivo")+" · "+(f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString():"fecha desconocida");
     meta.append(name,type);
-    const size=document.createElement("span");size.className="filesize";size.textContent=fmt(f.sizeBytes);
+    const size=document.createElement("span");size.className="filesize";size.textContent=f.service==="photos"?"Se calcula al copiar":fmt(f.sizeBytes);
     row.append(cb,icon,meta,size);list.append(row);
   }
   updateSummary();
@@ -196,7 +196,7 @@ async function pollProgress(){
     const p=data.progress||{};const percent=Number(p.percent||0);
     byId("jobProgress").style.width=percent+"%";byId("progressText").textContent="Progreso verificado: "+percent+"% · Estado: "+(data.job.status||p.status||"en cola");
     byId("remainingText").textContent=p.remainingSeconds==null?"Calculando tiempo restante…":"Tiempo restante estimado: "+Math.ceil(p.remainingSeconds/60)+" min";
-    if(data.job.status==="verified"){byId("confirmDeleteButton").disabled=currentJobService==="photos";byId("deleteHint").textContent=currentJobService==="photos"?"Copia de Google Fotos verificada. Los originales permanecen en la cuenta 1: la API no permite borrarlos automáticamente; revísalos y elimínalos manualmente desde Google Fotos si lo deseas.":"Copia verificada. Revisa la Cuenta 2 antes de confirmar el borrado."}
+    if(data.job.status==="verified"){byId("confirmDeleteButton").disabled=currentJobService==="photos";byId("deleteHint").textContent=currentJobService==="photos"?"Google Photos confirmó la creación en destino; revisa visualmente los elementos. Los originales permanecen en la cuenta 1 y deben eliminarse manualmente si lo deseas.":"Copia verificada. Revisa la Cuenta 2 antes de confirmar el borrado."}
     if(["verified","deleted","failed","cancelled"].includes(data.job.status))return;
   }catch(e){byId("remainingText").textContent="No se pudo actualizar el progreso: "+e.message}
   pollHandle=setTimeout(pollProgress,3000);
