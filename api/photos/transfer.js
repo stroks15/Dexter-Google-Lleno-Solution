@@ -4,6 +4,12 @@ import {getAccessToken} from "../_lib/drive.js";
 const MAX_BYTES=50*1024*1024;
 async function tokenForGoogle(role,userId){return getAccessToken(role,userId)}
 async function googleError(r){const t=await r.text();return t.slice(0,300)}
+async function readLimited(response,max){
+ const reader=response.body?.getReader();if(!reader)throw new Error("photos_download_body_missing");
+ const chunks=[];let total=0;
+ try{while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>max){await reader.cancel();throw new Error("photos_item_exceeds_50mb_function_limit_use_drive_export_or_split_selection");}chunks.push(Buffer.from(value));}}finally{try{reader.releaseLock()}catch{}}
+ return Buffer.concat(chunks,total);
+}
 export default async function handler(req,res){
  if(!method(req,res,["POST"]))return;
  try{
@@ -42,10 +48,9 @@ export default async function handler(req,res){
     if(!download.ok)throw Object.assign(new Error("photos_media_download_failed:"+download.status),{status:download.status});
     const declared=Number(download.headers.get("content-length")||0);
     if(declared>MAX_BYTES)throw new Error("photos_item_exceeds_50mb_function_limit_use_drive_export_or_split_selection");
-    const bytes=Buffer.from(await download.arrayBuffer());
-    if(bytes.length>MAX_BYTES)throw new Error("photos_item_exceeds_50mb_function_limit_use_drive_export_or_split_selection");
+    const bytes=await readLimited(download,MAX_BYTES);
     if(!bytes.length)throw new Error("photos_media_empty");
-    const upload=await fetch("https://photoslibrary.googleapis.com/v1/uploads",{method:"POST",headers:{Authorization:"Bearer "+targetToken,"Content-Type":"application/octet-stream","X-Goog-Upload-Content-Type":mf.mimeType,"X-Goog-Upload-Protocol":"raw","X-Goog-Upload-File-Name":encodeURIComponent(mf.filename||f.file_name||"photo")},body:bytes});
+    const upload=await fetch("https://photoslibrary.googleapis.com/v1/uploads",{method:"POST",headers:{Authorization:"Bearer "+targetToken,"Content-Type":"application/octet-stream","X-Goog-Upload-Content-Type":mf.mimeType,"X-Goog-Upload-Protocol":"raw","X-Goog-Upload-File-Name":String(mf.filename||f.file_name||"photo").replace(/[\\r\\n]/g,"_")},body:bytes});
     if(!upload.ok)throw Object.assign(new Error("photos_upload_bytes_failed:"+upload.status+":"+await googleError(upload)),{status:upload.status});
     const uploadToken=(await upload.text()).trim();
     if(!uploadToken)throw new Error("photos_upload_token_missing");
