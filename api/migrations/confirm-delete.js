@@ -12,7 +12,7 @@ export default async function handler(req,res){
   const job=jobs?.[0];
   if(!job||job.user_id!==user.id)return json(res,404,{error:"job_not_found"});
   if(job.status!=="verified")return json(res,409,{error:"job_must_be_fully_verified_first"});
-  const files=await sb("dexter_google_migration_files?select=id,source_file_id,status,source_service,destination_file_id,size_bytes,destination_md5&job_id=eq."+encodeURIComponent(jobId)+"&user_id=eq."+encodeURIComponent(user.id)+"&status=eq.verified");
+  const files=await sb("dexter_google_migration_files?select=id,source_file_id,status,source_service,destination_file_id,size_bytes,source_md5,destination_md5&job_id=eq."+encodeURIComponent(jobId)+"&user_id=eq."+encodeURIComponent(user.id)+"&status=eq.verified");
   if(!files.length)return json(res,409,{error:"no_verified_source_files_to_delete"});
   const sourceCredentials=await sb("dexter_google_credentials?select=scopes&user_id=eq."+encodeURIComponent(user.id)+"&account_role=eq.account_source&revoked_at=is.null");
   if(!sourceCredentials?.[0]?.scopes?.includes("https://www.googleapis.com/auth/drive"))
@@ -24,11 +24,15 @@ export default async function handler(req,res){
   for(const file of files){
     if(file.source_service!=="drive"){results.push({fileId:file.source_file_id,status:"unsupported"});continue;}
     try{
-      if(!file.destination_file_id||!file.destination_md5)throw new Error("destination_verification_metadata_missing");
+      if(!file.destination_file_id||!file.destination_md5||!file.source_md5)throw new Error("source_or_destination_checksum_missing_reverify_required");
+      const sourceCheck=await fetch("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(file.source_file_id)+"?fields=id,size,md5Checksum,trashed",{headers:{Authorization:"Bearer "+token}});
+      if(!sourceCheck.ok)throw new Error("source_recheck_failed:"+sourceCheck.status);
+      const source=await sourceCheck.json();
+      if(source.trashed||Number(source.size)!==Number(file.size_bytes)||source.md5Checksum!==file.source_md5)throw new Error("source_changed_after_copy_delete_blocked");
       const check=await fetch("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(file.destination_file_id)+"?fields=id,size,md5Checksum,trashed",{headers:{Authorization:"Bearer "+destinationToken}});
       if(!check.ok)throw new Error("destination_recheck_failed:"+check.status);
       const dest=await check.json();
-      if(dest.trashed||Number(dest.size)!==Number(file.size_bytes)||dest.md5Checksum!==file.destination_md5)throw new Error("destination_integrity_changed_after_verification");
+      if(dest.trashed||Number(dest.size)!==Number(file.size_bytes)||dest.md5Checksum!==file.destination_md5||dest.md5Checksum!==file.source_md5)throw new Error("destination_integrity_changed_after_verification");
       await deleteDriveFile(file.source_file_id,token);
       const now=new Date().toISOString();
       await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(file.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"deleted",deleted_at:now,updated_at:now})});
