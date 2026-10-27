@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import {apiError,env,json,method,redisSet,sb} from "../_lib/runtime.js";
+import {transferPhotosJob} from "../_lib/photos-transfer.js";
 
 const CHUNK = 8 * 1024 * 1024;
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
@@ -77,9 +78,10 @@ export default async function handler(req,res) {
     if(!supplied||supplied!==env("WORKER_SHARED_SECRET"))return json(res,401,{error:"unauthorized_worker"});
     const {jobId,userId}=req.body||{};
     if(!jobId||!userId)return json(res,400,{error:"jobId_and_userId_required"});
-    const jobs=await sb("dexter_google_migration_jobs?select=id,user_id,status,total_bytes,processed_bytes&id=eq."+encodeURIComponent(jobId));
+    const jobs=await sb("dexter_google_migration_jobs?select=id,user_id,status,total_bytes,processed_bytes,mode&id=eq."+encodeURIComponent(jobId));
     const job=jobs?.[0];
     if(!job||job.user_id!==userId)return json(res,404,{error:"job_not_found"});
+    if(job.mode==="photos_videos"){const result=await transferPhotosJob({jobId,userId});return json(res,result.statusCode,result.body);}
     const files=await sb("dexter_google_migration_files?select=id,source_file_id,destination_file_id,file_name,mime_type,size_bytes,status&job_id=eq."+encodeURIComponent(jobId)+"&source_service=eq.drive&status=in.(queued,failed,copying,verifying)");
     const sourceToken=await tokenFor("source",userId),targetToken=await tokenFor("destination",userId);
     const start=Date.now();
