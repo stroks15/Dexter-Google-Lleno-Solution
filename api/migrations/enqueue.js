@@ -19,6 +19,8 @@ export default async function handler(req,res) {
     const services=new Set(normalized.map(f=>f.service));
     if(services.size!==1)return json(res,400,{error:"queue_drive_and_photos_as_separate_jobs"});
     const service=normalized[0].service;
+    if(service==="photos"&&mode!=="photos_videos")return json(res,400,{error:"photos_jobs_require_photos_videos_mode"});
+    if(service==="drive"&&mode==="photos_videos")return json(res,400,{error:"photos_videos_mode_requires_photos_service"});
     if(service==="photos"){
       if(!photosSessionId||typeof photosSessionId!=="string")return json(res,400,{error:"photos_session_id_required"});
       const raw=await redis(["GET","dexter:photos:session:"+photosSessionId]);
@@ -42,7 +44,7 @@ export default async function handler(req,res) {
     const qstashToken=process.env.QSTASH_TOKEN;
     if (!qstashToken) return json(res,202,{jobId,status:"queued_database_only",note:"QSTASH_TOKEN is not configured; queue delivery is not active yet."});
     const base=env("APP_BASE_URL").replace(/\/$/,"");
-    const workerPath=service==="photos"?"/api/photos/transfer":"/api/workers/transfer";
+    const workerPath="/api/workers/transfer";
     const publish=await fetch("https://qstash.upstash.io/v2/publish/"+encodeURIComponent(base+workerPath),{
       method:"POST",headers:{Authorization:"Bearer "+qstashToken,"Content-Type":"application/json","Upstash-Forward-Authorization":"Bearer "+env("WORKER_SHARED_SECRET")},
       body:JSON.stringify({jobId,userId:user.id})
