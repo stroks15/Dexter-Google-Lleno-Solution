@@ -115,7 +115,7 @@ async function startPhotosPicker(){
  try{
   byId("selectPhotosButton").disabled=true;
   byId("photosHint").textContent="Creando sesión segura de Google Fotos…";
-  const result=await api("/api/migrations/scan?service=photos",{method:"POST",body:JSON.stringify({service:"photos"})};
+  const result=await api("/api/migrations/scan?service=photos",{method:"POST",body:JSON.stringify({service:"photos"})});
   photosSessionId=result.sessionId;
   if(popup)popup.location=result.pickerUri;else window.open(result.pickerUri,"_blank","noopener");
   byId("photosHint").textContent="Selecciona fotos y videos en Google Fotos. Esta página esperará a que termines…";
