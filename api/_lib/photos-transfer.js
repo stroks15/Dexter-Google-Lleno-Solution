@@ -1,20 +1,40 @@
 import {env,redis,sb,redisSet} from "./runtime.js";
 import {getAccessToken} from "./drive.js";
 
-const MAX_BYTES=50*1024*1024;
+const CHUNK_BYTES=8*1024*1024;
+const MAX_PHOTOS_VIDEO_BYTES=20*1024*1024*1024;
 async function googleError(r){return (await r.text()).slice(0,300)}
-async function readLimited(response,max){
+async function readChunk(response,maxBytes){
  const reader=response.body?.getReader();if(!reader)throw new Error("photos_download_body_missing");
  const chunks=[];let total=0;
- try{
-  while(true){
-   const {done,value}=await reader.read();if(done)break;
-   total+=value.byteLength;
-   if(total>max){await reader.cancel();throw new Error("photos_item_exceeds_50mb_function_limit");}
-   chunks.push(Buffer.from(value));
-  }
- }finally{try{reader.releaseLock()}catch{}}
+ try{while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>maxBytes){await reader.cancel();throw new Error("photos_source_range_exceeded_chunk_limit");}chunks.push(Buffer.from(value));}}
+ finally{try{reader.releaseLock()}catch{}}
  return Buffer.concat(chunks,total);
+}
+async function sourceRange(baseUrl,sourceToken,start,end){
+ const url=baseUrl+(baseUrl.endsWith("=dv")||baseUrl.endsWith("=d")?"":"=d");
+ const r=await fetch(url,{headers:{Authorization:"Bearer "+sourceToken,Range:`bytes=${start}-${end}`}});
+ if(r.status!==206){const body=(await r.text().catch(()=>"")).slice(0,180);throw Object.assign(new Error("photos_source_range_not_supported_or_expired:"+r.status+":"+body),{status:r.status});}
+ const contentRange=r.headers.get("content-range")||"";
+ const match=contentRange.match(/^bytes (\d+)-(\d+)\/(\d+)$/);
+ if(!match||Number(match[1])!==start)throw new Error("photos_source_content_range_invalid");
+ const bytes=await readChunk(r,CHUNK_BYTES);
+ if(bytes.length!==Number(match[2])-start+1)throw new Error("photos_source_chunk_size_mismatch");
+ return {bytes,total:Number(match[3]),end:Number(match[2])};
+}
+async function beginPhotosUpload(token,mimeType,total){
+ const r=await fetch("https://photoslibrary.googleapis.com/v1/uploads",{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Length":"0","X-Goog-Upload-Command":"start","X-Goog-Upload-Content-Type":mimeType||"application/octet-stream","X-Goog-Upload-Protocol":"resumable","X-Goog-Upload-Raw-Size":String(total)}});
+ if(!r.ok)throw Object.assign(new Error("photos_resumable_upload_start_failed:"+r.status+":"+await googleError(r)),{status:r.status});
+ const url=r.headers.get("x-goog-upload-url");if(!url)throw new Error("photos_resumable_upload_url_missing");
+ const granularity=Number(r.headers.get("x-goog-upload-chunk-granularity")||262144);
+ return {url,granularity};
+}
+async function sendPhotosChunk(session,bytes,offset,last){
+ const r=await fetch(session.url,{method:"POST",headers:{"Content-Length":String(bytes.length),"X-Goog-Upload-Command":last?"upload, finalize":"upload","X-Goog-Upload-Offset":String(offset)},body:bytes});
+ if(!r.ok)throw Object.assign(new Error("photos_resumable_chunk_failed:"+r.status+":"+await googleError(r)),{status:r.status});
+ const text=await r.text();
+ if(last&&!text.trim())throw new Error("photos_resumable_upload_token_missing");
+ return last?text.trim():null;
 }
 export async function transferPhotosJob({jobId,userId}){
  const jobs=await sb("dexter_google_migration_jobs?select=id,user_id,status,total_bytes,processed_bytes,mode&id=eq."+encodeURIComponent(jobId));
@@ -43,24 +63,30 @@ export async function transferPhotosJob({jobId,userId}){
   try{
    const item=selected.get(f.source_file_id),mf=item?.mediaFile;
    if(!mf?.baseUrl||!mf?.mimeType)throw new Error("selected_photo_not_found_or_url_expired");
-   const download=await fetch(mf.baseUrl+(item.type==="VIDEO"?"=dv":"=d"),{headers:{Authorization:"Bearer "+sourceToken}});
-   if(!download.ok)throw Object.assign(new Error("photos_media_download_failed:"+download.status),{status:download.status});
-   const declared=Number(download.headers.get("content-length")||0);
-   if(declared>MAX_BYTES)throw new Error("photos_item_exceeds_50mb_function_limit");
-   const bytes=await readLimited(download,MAX_BYTES);
-   if(!bytes.length)throw new Error("photos_media_empty");
-   const upload=await fetch("https://photoslibrary.googleapis.com/v1/uploads",{method:"POST",headers:{Authorization:"Bearer "+targetToken,"Content-Type":"application/octet-stream","X-Goog-Upload-Content-Type":mf.mimeType,"X-Goog-Upload-Protocol":"raw","X-Goog-Upload-File-Name":String(mf.filename||f.file_name||"photo").replaceAll(String.fromCharCode(13),"_").replaceAll(String.fromCharCode(10),"_")},body:bytes});
-   if(!upload.ok)throw Object.assign(new Error("photos_upload_bytes_failed:"+upload.status+":"+await googleError(upload)),{status:upload.status});
-   const uploadToken=(await upload.text()).trim();
+   const first=await sourceRange(mf.baseUrl+(item.type==="VIDEO"?"=dv":"=d"),sourceToken,0,0);
+   const totalSize=first.total;
+   if(!totalSize||totalSize>MAX_PHOTOS_VIDEO_BYTES)throw new Error("photos_item_size_outside_supported_range_max_20gb");
+   const uploadSession=await beginPhotosUpload(targetToken,mf.mimeType,totalSize);
+   let uploadToken=null,offset=0;
+   while(offset<totalSize){
+    const end=Math.min(totalSize-1,offset+CHUNK_BYTES-1);
+    const part=await sourceRange(mf.baseUrl+(item.type==="VIDEO"?"=dv":"=d"),sourceToken,offset,end);
+    if(part.total!==totalSize)throw new Error("photos_source_size_changed_during_transfer");
+    const last=part.end===totalSize-1;
+    if(!last&&part.bytes.length%uploadSession.granularity!==0)throw new Error("photos_chunk_not_aligned_to_google_granularity");
+    uploadToken=await sendPhotosChunk(uploadSession,part.bytes,offset,last)||uploadToken;
+    offset+=part.bytes.length;
+    processed+=part.bytes.length;total+=part.bytes.length;
+    await redisSet("migration:progress:"+jobId,{jobId,percent:Math.min(99,Math.floor(processed/Math.max(Number(job.total_bytes)||totalSize,1)*100)),remainingSeconds:null,processedBytes:processed,totalBytes:Math.max(Number(job.total_bytes)||totalSize,total),status:"copying"},86400);
+   }
    if(!uploadToken)throw new Error("photos_upload_token_missing");
    const create=await fetch("https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate",{method:"POST",headers:{Authorization:"Bearer "+targetToken,"Content-Type":"application/json"},body:JSON.stringify({newMediaItems:[{simpleMediaItem:{uploadToken,fileName:String(mf.filename||f.file_name||"photo").slice(0,255)}}]})});
    const created=await create.json().catch(()=>({}));
    const result=created.newMediaItemResults?.[0];
    if(!create.ok||!result?.mediaItem?.id)throw Object.assign(new Error("photos_media_create_failed:"+(result?.status?.message||created.error?.message||create.status)),{status:create.status});
    const now=new Date().toISOString();
-   await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:result.mediaItem.id,size_bytes:bytes.length,status:"verified",verified_at:now,updated_at:now})});
-   await sb("dexter_google_transfer_logs?job_id=eq."+encodeURIComponent(jobId)+"&source_service=eq.photos&file_id=eq."+encodeURIComponent(f.source_file_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"verified",destination_file_id:result.mediaItem.id,source_size_bytes:bytes.length,destination_size_bytes:bytes.length,verified_at:now,updated_at:now})});
-   processed+=bytes.length;total+=bytes.length;
+   await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:result.mediaItem.id,size_bytes:totalSize,status:"verified",verified_at:now,updated_at:now})});
+   await sb("dexter_google_transfer_logs?job_id=eq."+encodeURIComponent(jobId)+"&source_service=eq.photos&file_id=eq."+encodeURIComponent(f.source_file_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"verified",destination_file_id:result.mediaItem.id,source_size_bytes:totalSize,destination_size_bytes:totalSize,verified_at:now,updated_at:now})});
   }catch(e){
    failed++;
    await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"failed",error_message:String(e.message||"photos_transfer_failed").slice(0,300),updated_at:new Date().toISOString()})});
