@@ -1,4 +1,4 @@
-import {apiError,json,method,requireUser,redisSet,sb} from "../_lib/runtime.js";
+import {apiError,json,method,requireUser,redis,redisSet,sb} from "../_lib/runtime.js";
 import {getAccessToken} from "../_lib/drive.js";
 
 export default async function handler(req,res){
@@ -21,7 +21,7 @@ export default async function handler(req,res){
   }
   const sessionId=String(req.query?.sessionId||"");
   if(!sessionId||sessionId.length>256)return json(res,400,{error:"sessionId_required"});
-  const raw=await (await import("../_lib/runtime.js")).redis(["GET","dexter:photos:session:"+sessionId]);
+  const raw=await redis(["GET","dexter:photos:session:"+sessionId]);
   const record=typeof raw==="string"?JSON.parse(raw):raw;
   if(!record||record.userId!==user.id)return json(res,404,{error:"photos_picker_session_not_found"});
   const r=await fetch("https://photospicker.googleapis.com/v1/sessions/"+encodeURIComponent(sessionId),{headers:{Authorization:"Bearer "+token}});
