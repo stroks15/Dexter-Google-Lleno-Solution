@@ -130,7 +130,7 @@ export default async function handler(req,res) {
         if(!finalData?.id)throw new Error("destination_upload_not_finalized");
         if(!sizeOk||!hashOk)throw new Error("destination_integrity_verification_failed");
         const now=new Date().toISOString();
-        await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:dest.id,status:"verified",destination_md5:dest.md5Checksum,verified_at:now,updated_at:now})});
+        await sb("dexter_google_migration_files?id=eq."+encodeURIComponent(f.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({destination_file_id:dest.id,status:"verified",source_md5:meta.md5Checksum,destination_md5:dest.md5Checksum,verified_at:now,updated_at:now})});
         await sb("dexter_google_transfer_logs?job_id=eq."+encodeURIComponent(jobId)+"&source_service=eq.drive&file_id=eq."+encodeURIComponent(f.source_file_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"verified",destination_file_id:dest.id,source_size_bytes:size,destination_size_bytes:Number(dest.size),source_checksum:meta.md5Checksum||sourceMd5,destination_checksum:dest.md5Checksum,copied_at:now,verified_at:now,updated_at:now})});
       } catch(e) {
         await sb("dexter_google_transfer_logs?job_id=eq."+encodeURIComponent(jobId)+"&source_service=eq.drive&file_id=eq."+encodeURIComponent(f.source_file_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"failed",error_code:String(e.status||"transfer_error"),error_message:String(e.message||"").slice(0,300),updated_at:new Date().toISOString()})});
