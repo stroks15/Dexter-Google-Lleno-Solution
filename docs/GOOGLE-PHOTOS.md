@@ -11,6 +11,6 @@ This flow uses Google's Picker API for user-selected source media and the Photos
 
 ## Important constraints
 - This implementation intentionally caps each item at 50 MiB because the current Vercel function buffers one item in memory. Larger videos must not be queued through this path until a streaming/resumable worker is deployed.
-- Google Photos APIs do not provide a supported general-purpose delete operation for arbitrary existing library items. This flow copies and verifies selected media but never deletes originals. To free Photos storage, review the destination manually first, then delete the originals manually in Google Photos.
+- Google Photos APIs do not provide a supported general-purpose delete operation for arbitrary existing library items. This flow copies selected media and records successful item creation returned by Google Photos; the Picker API does not provide a source checksum for byte-for-byte verification in this implementation. It never deletes originals. To free Photos storage, review the destination manually first, then delete the originals manually in Google Photos.
 - Picker media URLs expire. Start the queued transfer promptly after selection.
 - Google OAuth consent screen / verification and API access must be approved/configured for the Google accounts used. The API being enabled alone does not guarantee access.
