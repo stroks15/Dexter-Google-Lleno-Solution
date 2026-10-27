@@ -106,7 +106,7 @@ byId("googleSignInButton").addEventListener("click",async()=>{
   }
 });
 byId("signOutButton").addEventListener("click",async()=>{await supabaseClient.auth.signOut();session=null;selected.clear();files=[];renderFiles();await refreshAuth()});
-byId("scanButton").addEventListener("click",()=>scanFiles(false));
+byId("scanButton").addEventListener("click",()=>{currentSourceService="drive";scanFiles(false)});
 byId("loadMoreButton").addEventListener("click",()=>scanFiles(true));
 byId("selectPhotosButton").addEventListener("click",()=>startPhotosPicker());
 async function startPhotosPicker(){
