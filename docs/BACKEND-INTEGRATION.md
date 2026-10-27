@@ -6,13 +6,15 @@
 - `GET /api/auth/callback/google`: exchanges OAuth code, verifies Google identity, encrypts refresh token with AES-256-GCM, and stores it in the server-only Supabase secret table.
 - `GET /api/auth/connections`: safe connection metadata only.
 - `POST /api/migrations/enqueue`: creates a migration job, rows and idempotency logs, then publishes to QStash when configured.
-- `POST /api/workers/transfer`: protected QStash worker; streams Drive files in resumable 8 MiB chunks, retries transient errors up to five times, updates Redis progress, and verifies destination size plus MD5 before marking verified.
+- `POST /api/workers/transfer`: protected QStash worker for Drive; transfers files in resumable 8 MiB chunks and verifies destination size plus MD5 before marking verified.
+- `POST /api/migrations/scan?service=photos` and `GET /api/migrations/scan?service=photos&sessionId=...`: create a Google Photos Picker session and poll/list the user selection.
+- `POST /api/workers/transfer`: the same protected QStash worker dispatches Drive jobs or Google Photos Picker jobs; Photos copies selected media into the destination library using `photoslibrary.appendonly`, with a 50 MiB per-item cap.
 - `GET /api/migrations/progress?jobId=...`: reads job and Redis progress for the signed-in owner.
 - `POST /api/migrations/confirm-delete`: requires the exact explicit confirmation string and deletes only source Drive IDs whose records are verified.
 
 ## Correct OAuth scopes
 
-The scope host must be `https://www.googleapis.com/auth/...`, not `https://googleapis.com`. Source Drive initially requests `drive.readonly`; destination Drive requests `drive.file`. Only after a job is fully verified and the user explicitly confirms deletion does the app ask Google for an additional `drive` scope, replacing the source token. Photos scopes are requested separately, but the transfer enqueue endpoint intentionally rejects Photos jobs until the app's allowed Photos API methods and data-access policy have been validated. Do not imply that arbitrary Google Photos library items can be copied/deleted with the Drive API.
+The scope host must be `https://www.googleapis.com/auth/...`, not `https://googleapis.com`. Source Drive initially requests `drive.readonly`; destination Drive requests `drive.file`. Only after a job is fully verified and the user explicitly confirms deletion does the app ask Google for an additional `drive` scope, replacing the source token. Google Photos source media is selected explicitly through Picker API; the destination uses `photoslibrary.appendonly` to create new media items. This does not allow deleting arbitrary original Google Photos library items. After verifying the destination, the user must manage original deletion manually in Google Photos. See `docs/GOOGLE-PHOTOS.md` for limits.
 
 ## Required Vercel environment variables
 

@@ -1,6 +1,9 @@
 const selected = new Map();
 let files = [];
 let nextPageToken = null;
+let photosSessionId = null;
+let currentSourceService = "drive";
+let currentJobService = "drive";
 let currentJobId = null;
 let supabaseClient = null;
 let session = null;
@@ -9,6 +12,7 @@ let pendingDeleteConfirmation = null;
 const list = document.querySelector("#fileList");
 const fmt = n => (Number(n||0)/1e9).toFixed(2)+" GB";
 const byId = id => document.getElementById(id);
+const keyFor = f => f.service+":"+f.fileId;
 async function api(path, options={}) {
   const headers = {"Content-Type":"application/json",...(options.headers||{})};
   if(session?.access_token) headers.Authorization="Bearer "+session.access_token;
@@ -31,8 +35,8 @@ function renderFiles(){
   if(!files.length){list.textContent="Inicia sesión y pulsa «Escanear archivos reales de Drive» para cargar tus archivos.";updateSummary();return}
   for(const f of files){
     const row=document.createElement("label");row.className="file";
-    const cb=document.createElement("input");cb.type="checkbox";cb.checked=selected.has(f.fileId);cb.setAttribute("aria-label","Seleccionar "+f.name);
-    cb.addEventListener("change",()=>{if(cb.checked)selected.set(f.fileId,f);else selected.delete(f.fileId);updateSummary()});
+    const cb=document.createElement("input");cb.type="checkbox";cb.checked=selected.has(keyFor(f));cb.setAttribute("aria-label","Seleccionar "+f.name);
+    cb.addEventListener("change",()=>{if(cb.checked)selected.set(keyFor(f),f);else selected.delete(keyFor(f));updateSummary()});
     const icon=document.createElement("span");icon.className="fileicon";icon.textContent=f.mimeType?.startsWith("video/")?"▷":f.mimeType?.startsWith("image/")?"▧":"▤";
     const meta=document.createElement("span");meta.className="filemeta";
     const name=document.createElement("strong");name.textContent=f.name;
@@ -102,36 +106,84 @@ byId("googleSignInButton").addEventListener("click",async()=>{
   }
 });
 byId("signOutButton").addEventListener("click",async()=>{await supabaseClient.auth.signOut();session=null;selected.clear();files=[];renderFiles();await refreshAuth()});
-byId("scanButton").addEventListener("click",()=>scanFiles(false));
+byId("scanButton").addEventListener("click",()=>{currentSourceService="drive";scanFiles(false)});
 byId("loadMoreButton").addEventListener("click",()=>scanFiles(true));
+byId("selectPhotosButton").addEventListener("click",()=>startPhotosPicker());
+async function startPhotosPicker(){
+ if(!session){byId("photosHint").textContent="Inicia sesión primero.";return}
+ const popup=window.open("about:blank","googlePhotosPicker","popup,width=1000,height=760");
+ try{
+  byId("selectPhotosButton").disabled=true;
+  byId("photosHint").textContent="Creando sesión segura de Google Fotos…";
+  const result=await api("/api/migrations/scan?service=photos",{method:"POST",body:JSON.stringify({service:"photos"})});
+  photosSessionId=result.sessionId;
+  if(popup)popup.location=result.pickerUri;else window.open(result.pickerUri,"_blank","noopener");
+  byId("photosHint").textContent="Selecciona fotos y videos en Google Fotos. Esta página esperará a que termines…";
+  const deadline=Date.now()+15*60*1000;
+  let readyResult=null;
+  while(Date.now()<deadline){
+   await new Promise(resolve=>setTimeout(resolve,3000));
+   const status=await api("/api/migrations/scan?service=photos&sessionId="+encodeURIComponent(photosSessionId));
+   if(status.ready){readyResult=status;break}
+  }
+  if(!readyResult)throw new Error("No se detectó la selección. Vuelve a abrir el selector e inténtalo de nuevo.");
+  const selectedPhotos=readyResult.items||[];
+  if(!selectedPhotos.length)throw new Error("No seleccionaste elementos en Google Fotos.");
+  files=selectedPhotos;selected.clear();currentSourceService="photos";nextPageToken=readyResult.nextPageToken||null;
+  document.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("selected",b.dataset.mode==="photos_videos"));
+  byId("loadMoreButton").hidden=!nextPageToken;
+  byId("actionHint").textContent=selectedPhotos.length+" elementos seleccionados desde Google Fotos. Marca los que quieras copiar.";
+  byId("photosHint").textContent="Selección lista. Los elementos de más de 50 MiB no se pueden procesar con el worker actual; los originales no se borrarán automáticamente.";
+  renderFiles();
+ }catch(e){if(popup&&popup.closed===false){}byId("photosHint").textContent="No se pudo seleccionar Google Fotos: "+e.message}
+ finally{byId("selectPhotosButton").disabled=false}
+}
+
 async function scanFiles(loadMore){
   if(!session){byId("actionHint").textContent="Inicia sesión primero.";return}
   try{
-    byId("scanButton").disabled=true;byId("loadMoreButton").disabled=true;byId("actionHint").textContent="Consultando archivos reales de Google Drive…";
-    const path="/api/migrations/scan"+(loadMore&&nextPageToken?"?pageToken="+encodeURIComponent(nextPageToken):"");
-    const result=await api(path);
-    if(!loadMore){files=[];selected.clear()}
-    files.push(...result.files);nextPageToken=result.nextPageToken;
-    byId("loadMoreButton").hidden=!nextPageToken;
-    byId("actionHint").textContent=files.length+" archivos de Drive cargados. Selecciona los que quieras copiar.";
+    byId("scanButton").disabled=true;byId("loadMoreButton").disabled=true;
+    if(currentSourceService==="photos"&&photosSessionId){
+      byId("actionHint").textContent="Cargando más elementos seleccionados de Google Fotos…";
+      const path="/api/migrations/scan?service=photos&sessionId="+encodeURIComponent(photosSessionId)+(loadMore&&nextPageToken?"&pageToken="+encodeURIComponent(nextPageToken):"");
+      const result=await api(path);
+      if(!result.ready)throw new Error("La selección de Google Fotos todavía no está lista.");
+      files.push(...(result.items||[]));nextPageToken=result.nextPageToken||null;
+      byId("loadMoreButton").hidden=!nextPageToken;
+      byId("actionHint").textContent=files.length+" elementos seleccionados desde Google Fotos.";
+    }else{
+      byId("actionHint").textContent="Consultando archivos reales de Google Drive…";
+      const path="/api/migrations/scan"+(loadMore&&nextPageToken?"?pageToken="+encodeURIComponent(nextPageToken):"");
+      const result=await api(path);
+      if(!loadMore){files=[];selected.clear()}
+      files.push(...result.files);nextPageToken=result.nextPageToken;currentSourceService="drive";
+      byId("loadMoreButton").hidden=!nextPageToken;
+      byId("actionHint").textContent=files.length+" archivos de Drive cargados. Selecciona los que quieras copiar.";
+    }
     renderFiles();
-  }catch(e){byId("actionHint").textContent="No se pudo escanear Drive: "+e.message}
+  }catch(e){byId("actionHint").textContent="No se pudieron cargar los archivos: "+e.message}
   finally{byId("scanButton").disabled=false;byId("loadMoreButton").disabled=false}
 }
 byId("toggleAll").addEventListener("click",()=>{
-  if(files.length&&selected.size===files.length)selected.clear();else files.forEach(f=>selected.set(f.fileId,f));
+  if(files.length&&selected.size===files.length)selected.clear();else files.forEach(f=>selected.set(keyFor(f),f));
   renderFiles();
 });
 document.querySelectorAll("[data-mode]").forEach(button=>button.addEventListener("click",()=>{
   document.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("selected",b===button));
-  if(button.dataset.mode!=="drive"&&button.dataset.mode!=="all")byId("actionHint").textContent="La transferencia de Google Fotos todavía no está habilitada; por seguridad solo se encolan archivos de Drive.";
+  if(button.dataset.mode==="photos_videos"){byId("actionHint").textContent="Pulsa «Elegir fotos y videos de Google Fotos» para abrir el selector oficial.";}
+  else if(button.dataset.mode==="drive"){byId("actionHint").textContent="Escanea Google Drive para elegir archivos.";}
+  else if(button.dataset.mode==="all"){byId("actionHint").textContent="Drive y Fotos se procesan en tareas separadas; elige una fuente cada vez.";}
+  else byId("actionHint").textContent="Elige los elementos con el selector oficial de Google Fotos y luego selecciona fotos o videos.";
 }));
 byId("startButton").addEventListener("click",async()=>{
   if(!session){byId("actionHint").textContent="Inicia sesión primero.";return}
   if(!selected.size){byId("actionHint").textContent="Escanea Drive y selecciona al menos un archivo real.";return}
   try{
     byId("startButton").disabled=true;byId("actionHint").textContent="Creando tarea de migración…";
-    const result=await api("/api/migrations/enqueue",{method:"POST",body:JSON.stringify({mode:"drive",files:[...selected.values()].map(f=>({fileId:f.fileId,name:f.name,mimeType:f.mimeType,sizeBytes:f.sizeBytes,service:"drive"}))})});
+    const service=[...selected.values()][0]?.service||currentSourceService;
+    if([...selected.values()].some(f=>f.service!==service))throw new Error("Selecciona archivos de Drive o Google Fotos, no mezcles fuentes en una tarea.");
+    currentJobService=service;
+    const result=await api("/api/migrations/enqueue",{method:"POST",body:JSON.stringify({mode:service==="photos"?"photos_videos":"drive",photosSessionId:service==="photos"?photosSessionId:undefined,files:[...selected.values()].map(f=>({fileId:f.fileId,name:f.name,mimeType:f.mimeType,sizeBytes:f.sizeBytes,service}))})});
     currentJobId=result.jobId;byId("progressPanel").hidden=false;byId("progressText").textContent="Migración: "+result.status;byId("deleteHint").textContent="La verificación se realizará antes de habilitar el borrado.";
     pollProgress();
   }catch(e){byId("actionHint").textContent="No se pudo iniciar: "+e.message}
@@ -144,13 +196,14 @@ async function pollProgress(){
     const p=data.progress||{};const percent=Number(p.percent||0);
     byId("jobProgress").style.width=percent+"%";byId("progressText").textContent="Progreso verificado: "+percent+"% · Estado: "+(data.job.status||p.status||"en cola");
     byId("remainingText").textContent=p.remainingSeconds==null?"Calculando tiempo restante…":"Tiempo restante estimado: "+Math.ceil(p.remainingSeconds/60)+" min";
-    if(data.job.status==="verified"){byId("confirmDeleteButton").disabled=false;byId("deleteHint").textContent="Copia verificada. Revisa la Cuenta 2 antes de confirmar el borrado."}
+    if(data.job.status==="verified"){byId("confirmDeleteButton").disabled=currentJobService==="photos";byId("deleteHint").textContent=currentJobService==="photos"?"Copia de Google Fotos verificada. Los originales permanecen en la cuenta 1: la API no permite borrarlos automáticamente; revísalos y elimínalos manualmente desde Google Fotos si lo deseas.":"Copia verificada. Revisa la Cuenta 2 antes de confirmar el borrado."}
     if(["verified","deleted","failed","cancelled"].includes(data.job.status))return;
   }catch(e){byId("remainingText").textContent="No se pudo actualizar el progreso: "+e.message}
   pollHandle=setTimeout(pollProgress,3000);
 }
 byId("confirmDeleteButton").addEventListener("click",async()=>{
   if(!session||!currentJobId)return;
+  if(currentJobService==="photos"){byId("deleteHint").textContent="Google Photos no permite borrar automáticamente los originales seleccionados mediante esta API. Verifica la copia y gestiona el borrado manualmente en Google Fotos.";return;}
   const warning="Entra a tu cuenta de Google número 2 y revisa en Drive que todos los archivos seleccionados estén completos para tu mayor seguridad. Una vez que verifiques que todo está completo y sin errores, presiona aquí para eliminar los archivos copiados de la cuenta 1";
   if(!window.confirm(warning))return;
   const typed=window.prompt('Para confirmar, escribe exactamente: ELIMINAR ARCHIVOS VERIFICADOS DE LA CUENTA 1');
