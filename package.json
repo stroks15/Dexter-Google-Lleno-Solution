@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Secure dual-account Google Drive migration web app",
   "scripts": {
-    "build": "node scripts/validate-config.mjs && node scripts/validate-source.mjs",
+    "build": "node scripts/validate-config.mjs && node scripts/validate-source.mjs && node scripts/validate-durable-transfer.mjs",
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android",
     "android:prepare": "npm run build && npx cap sync android"
