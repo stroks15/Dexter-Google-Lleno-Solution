@@ -4,7 +4,7 @@
 - Free: máximo acumulado 2 GB (2,000,000,000 bytes).
 - Premium mensual: $129 MXN/mes.
 - Premium de por vida: $499 MXN pago único.
-- DEXTERH4CK: $30 MXN menos en el primer cobro; para mensual, el webhook cambia la recurrencia a $129 MXN después de autorizar el ciclo inicial.
+- DEXTERH4CK: $30 MXN menos en el primer cobro; para mensual, el webhook mantiene $99 MXN hasta confirmar el primer pago y después cambia las renovaciones a $129 MXN.
 - LIAM-LIZ-FER-H4CK: activa Premium de por vida directamente; una redención por usuario.
 
 ## Variables Vercel
