@@ -1,0 +1,1 @@
+{"name":"Dexter Google Lleno Solution","short_name":"Dexter","description":"Asistente guiado para Google Fotos Partner Sharing","start_url":"./","scope":"./","display":"standalone","background_color":"#020a06","theme_color":"#03120b","icons":[{"src":"./dexter-icon.jpg","sizes":"64x64","type":"image/jpeg","purpose":"any maskable"}]}

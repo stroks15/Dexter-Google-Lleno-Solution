@@ -4,8 +4,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
-        android:label="Espacio Google"
+        android:label="Dexter Google Lleno Solution"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false">
         <activity
