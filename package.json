@@ -20,6 +20,6 @@
     "@capacitor/cli": "^7.4.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": "24.x"
   }
 }
