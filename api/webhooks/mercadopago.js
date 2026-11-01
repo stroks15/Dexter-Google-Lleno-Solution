@@ -36,14 +36,17 @@ export default async function handler(req,res){
     const subs=await sb("dexter_billing_orders?select=*&mp_preapproval_id=eq."+encodeURIComponent(String(payment.preapproval_id)));
     order=subs?.[0];
     if(order?.plan_type==="premium_monthly"){
-     const redeemed=order.discount_coupon_applied?await sb("dexter_coupon_redemptions?select=id&coupon_code=eq."+encodeURIComponent(order.discount_coupon_applied)+"&user_id=eq."+encodeURIComponent(order.user_id)):[];
-     const expected=order.discount_coupon_applied&&redeemed?.length?129:Number(order.amount_mxn);
+     if(order.mp_first_payment_id&&String(order.mp_first_payment_id)===String(payment.id))
+      return json(res,200,{received:true,processed:true,duplicate:true});
+     const isDiscountedFirstCycle=!!order.discount_coupon_applied&&!order.mp_first_payment_id;
+     const expected=isDiscountedFirstCycle?Number(order.amount_mxn):Number(order.discount_coupon_applied?129:order.amount_mxn);
      if(Number(payment.transaction_amount)!==expected)return json(res,409,{error:"amount_mismatch"});
-     await grant(order.user_id,"premium_monthly",order.discount_coupon_applied,String(payment.preapproval_id));
-     if(order.discount_coupon_applied&&!redeemed?.length){
+     if(isDiscountedFirstCycle){
       await new PreApproval(client()).update({id:String(payment.preapproval_id),body:{auto_recurring:{frequency:1,frequency_type:"months",transaction_amount:129,currency_id:"MXN"}}});
       await sb("dexter_coupon_redemptions",{method:"POST",headers:{"Prefer":"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify([{user_id:order.user_id,coupon_code:order.discount_coupon_applied}])});
      }
+     await grant(order.user_id,"premium_monthly",order.discount_coupon_applied,String(payment.preapproval_id));
+     if(isDiscountedFirstCycle)await sb("dexter_billing_orders?id=eq."+encodeURIComponent(order.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({mp_first_payment_id:String(payment.id)})});
      return json(res,200,{received:true,processed:true,subscription:true});
     }
    }
