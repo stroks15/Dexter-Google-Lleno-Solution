@@ -13,12 +13,13 @@
   "dependencies": {
     "@capacitor/android": "^7.4.3",
     "@capacitor/core": "^7.4.3",
-    "@supabase/supabase-js": "^2.57.0"
+    "@supabase/supabase-js": "^2.57.0",
+    "mercadopago": "3.6.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": "24.x"
   }
 }
