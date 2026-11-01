@@ -5,6 +5,7 @@ const client=()=>new MercadoPagoConfig({accessToken:env("MP_ACCESS_TOKEN"),optio
 function signatureOK(req,id){
  const parts=Object.fromEntries((req.headers["x-signature"]||"").split(",").map(x=>x.trim().split("=").map(y=>y.trim())));
  const rid=req.headers["x-request-id"]||"";if(!parts.ts||!parts.v1||!rid||!id)return false;
+ const timestamp=Number(parts.ts);if(!Number.isFinite(timestamp)||Math.abs(Date.now()/1000-timestamp)>300)return false;
  const manifest="id:"+String(id).toLowerCase()+";request-id:"+rid+";ts:"+parts.ts+";";
  const expected=crypto.createHmac("sha256",env("MP_WEBHOOK_SECRET")).update(manifest).digest("hex");
  const a=Buffer.from(expected,"hex"),b=Buffer.from(parts.v1,"hex");return a.length===b.length&&crypto.timingSafeEqual(a,b);
