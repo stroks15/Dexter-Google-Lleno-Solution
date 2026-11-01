@@ -6,4 +6,4 @@ export const mpPreApproval=()=>new PreApproval(client());
 export const mpPayment=()=>new Payment(client());
 export const MONTHLY_MXN=129;
 export const LIFETIME_MXN=499;
-export const FREE_LIMIT_BYTES=2147483648;
+export const FREE_LIMIT_BYTES=2000000000;
