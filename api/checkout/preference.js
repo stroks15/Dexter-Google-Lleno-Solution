@@ -7,6 +7,10 @@ export default async function handler(req,res){
  try{
   const user=await requireUser(req),{plan_selected,coupon_code}=req.body||{};
   if(!["premium_monthly","premium_lifetime"].includes(plan_selected))return json(res,400,{error:"invalid_plan"});
+  const existing=await sb("dexter_user_entitlements?select=plan_type&user_id=eq."+encodeURIComponent(user.id));
+  if(existing?.[0]?.plan_type&&existing[0].plan_type!=="free")return json(res,409,{error:"premium_already_active"});
+  const pending=await sb("dexter_billing_orders?select=id&user_id=eq."+encodeURIComponent(user.id)+"&status=in.(pending,authorized)&created_at=gte."+encodeURIComponent(new Date(Date.now()-30*60*1000).toISOString()));
+  if(pending?.length)return json(res,409,{error:"checkout_already_pending"});
   const code=couponCode(coupon_code);let coupon=null;
   if(code){
    const found=await sb("dexter_coupons?select=code,discount_mxn,grants_lifetime,active&code=eq."+encodeURIComponent(code));
