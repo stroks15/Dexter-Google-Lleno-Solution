@@ -22,13 +22,24 @@ export default async function handler(req,res){
   if(type==="payment"){
    const payment=await new Payment(client()).get({id:String(id)});
    if(payment.status!=="approved")return json(res,200,{received:true,processed:false,status:payment.status});
-   const rows=await sb("dexter_billing_orders?select=*&id=eq."+encodeURIComponent(payment.external_reference||""));
-   const order=rows?.[0];if(!order||order.plan_type!=="premium_lifetime")return json(res,200,{received:true,processed:false,reason:"order_not_found"});
-   if(Number(payment.transaction_amount)!==Number(order.amount_mxn))return json(res,409,{error:"amount_mismatch"});
-   await sb("dexter_billing_orders?id=eq."+order.id,{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"approved",mp_payment_id:String(payment.id)})});
-   await grant(order.user_id,"premium_lifetime",order.discount_coupon_applied);
-   if(order.discount_coupon_applied)await sb("dexter_coupon_redemptions",{method:"POST",headers:{"Prefer":"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify([{user_id:order.user_id,coupon_code:order.discount_coupon_applied}])});
-   return json(res,200,{received:true,processed:true});
+   const byReference=await sb("dexter_billing_orders?select=*&id=eq."+encodeURIComponent(payment.external_reference||""));
+   let order=byReference?.[0];
+   if(order?.plan_type==="premium_lifetime"){
+    if(Number(payment.transaction_amount)!==Number(order.amount_mxn))return json(res,409,{error:"amount_mismatch"});
+    await sb("dexter_billing_orders?id=eq."+order.id,{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:"approved",mp_payment_id:String(payment.id)})});
+    await grant(order.user_id,"premium_lifetime",order.discount_coupon_applied);
+    if(order.discount_coupon_applied)await sb("dexter_coupon_redemptions",{method:"POST",headers:{"Prefer":"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify([{user_id:order.user_id,coupon_code:order.discount_coupon_applied}])});
+    return json(res,200,{received:true,processed:true});
+   }
+   if(payment.preapproval_id){
+    const subs=await sb("dexter_billing_orders?select=*&mp_preapproval_id=eq."+encodeURIComponent(String(payment.preapproval_id)));
+    order=subs?.[0];
+    if(order?.plan_type==="premium_monthly"){
+     await grant(order.user_id,"premium_monthly",order.discount_coupon_applied,String(payment.preapproval_id));
+     return json(res,200,{received:true,processed:true,subscription:true});
+    }
+   }
+   return json(res,200,{received:true,processed:false,reason:"order_not_found"});
   }
   if(type==="subscription_preapproval"||type==="preapproval"){
    const sub=await new PreApproval(client()).get({id:String(id)});
@@ -42,7 +53,8 @@ export default async function handler(req,res){
      await sb("dexter_coupon_redemptions",{method:"POST",headers:{"Prefer":"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify([{user_id:order.user_id,coupon_code:order.discount_coupon_applied}])});
     }
    }else if(["cancelled","paused"].includes(sub.status)){
-    await sb("dexter_user_entitlements?user_id=eq."+order.user_id,{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({subscription_status:sub.status})});
+    await sb("dexter_user_entitlements?user_id=eq."+encodeURIComponent(order.user_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({plan_type:"free",subscription_status:sub.status,mp_preapproval_id:String(sub.id)})});
+    await redisSet("dexter:entitlement:"+order.user_id,{plan_type:"free",updated_at:new Date().toISOString()});
    }
    return json(res,200,{received:true,processed:true,status:sub.status});
   }
