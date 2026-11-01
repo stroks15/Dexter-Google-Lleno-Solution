@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Secure dual-account Google Drive migration web app",
+  "description": "Metadata-only Google Photos Partner Sharing guide",
   "scripts": {
     "build": "node scripts/validate-config.mjs && node scripts/validate-source.mjs",
     "cap:sync": "npx cap sync android",
