@@ -31,7 +31,7 @@ async function init(){try{const r=await fetch("/api/config"),c=await r.json();if
  $("motionPreference").addEventListener("change",e=>applyMotion(e.target.checked));$("motionToggle").addEventListener("click",()=>applyMotion(!motion));
  document.querySelectorAll(".theme-choice").forEach(btn=>btn.addEventListener("click",()=>{document.body.dataset.theme=btn.dataset.theme;document.querySelectorAll(".theme-choice").forEach(b=>b.classList.toggle("active",b===btn));try{localStorage.setItem("dexter-theme",btn.dataset.theme)}catch{}}));
  try{const savedMotion=localStorage.getItem("dexter-motion");applyMotion(savedMotion!=="off");const theme=localStorage.getItem("dexter-theme");if(theme&&["green","cyan","violet"].includes(theme)){document.body.dataset.theme=theme;document.querySelectorAll(".theme-choice").forEach(b=>b.classList.toggle("active",b.dataset.theme===theme))}}catch{applyMotion(!window.matchMedia("(prefers-reduced-motion: reduce)").matches)}
- if(window.matchMedia("(prefers-reduced-motion: reduce)").matches&&!localStorage.getItem("dexter-motion"))applyMotion(false);
+ try{if(window.matchMedia("(prefers-reduced-motion: reduce)").matches&&!localStorage.getItem("dexter-motion"))applyMotion(false)}catch{}
  let carouselTimer=null;const startCarousel=()=>{if(carouselTimer)clearInterval(carouselTimer);if(motion)carouselTimer=setInterval(()=>{if(document.visibilityState==="visible"&&!document.querySelector(".hero-carousel:hover"))setFeature((feature+1)%3)},5200)};
  const originalApplyMotion=applyMotion;applyMotion=(enabled)=>{originalApplyMotion(enabled);startCarousel()};
  startCarousel();showStep(0);
