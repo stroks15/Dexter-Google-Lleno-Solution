@@ -7,10 +7,6 @@ export default async function handler(req,res){
  try{
   const user=await requireUser(req),{plan_selected,coupon_code}=req.body||{};
   if(!["premium_monthly","premium_lifetime"].includes(plan_selected))return json(res,400,{error:"invalid_plan"});
-  const existing=await sb("dexter_user_entitlements?select=plan_type&user_id=eq."+encodeURIComponent(user.id));
-  if(existing?.[0]?.plan_type&&existing[0].plan_type!=="free")return json(res,409,{error:"premium_already_active"});
-  const pending=await sb("dexter_billing_orders?select=id&user_id=eq."+encodeURIComponent(user.id)+"&status=in.(pending,authorized)&created_at=gte."+encodeURIComponent(new Date(Date.now()-30*60*1000).toISOString()));
-  if(pending?.length)return json(res,409,{error:"checkout_already_pending"});
   const code=couponCode(coupon_code);let coupon=null;
   if(code){
    const found=await sb("dexter_coupons?select=code,discount_mxn,grants_lifetime,active&code=eq."+encodeURIComponent(code));
@@ -24,6 +20,10 @@ export default async function handler(req,res){
    await (await import("../_lib/runtime.js")).redisSet("dexter:entitlement:"+user.id,{plan_type:"premium_lifetime",updated_at:new Date().toISOString()});
    return json(res,200,{bypass:true,plan_type:"premium_lifetime",message:"Premium de por vida activado."});
   }
+  const existing=await sb("dexter_user_entitlements?select=plan_type&user_id=eq."+encodeURIComponent(user.id));
+  if(existing?.[0]?.plan_type&&existing[0].plan_type!=="free")return json(res,409,{error:"premium_already_active"});
+  const pending=await sb("dexter_billing_orders?select=id&user_id=eq."+encodeURIComponent(user.id)+"&status=in.(pending,authorized)&created_at=gte."+encodeURIComponent(new Date(Date.now()-30*60*1000).toISOString()));
+  if(pending?.length)return json(res,409,{error:"checkout_already_pending"});
   const base=plan_selected==="premium_monthly"?MONTHLY_MXN:LIFETIME_MXN;
   const amount=Math.max(0,Number((base-(coupon?Number(coupon.discount_mxn):0)).toFixed(2)));
   const id=crypto.randomUUID();
