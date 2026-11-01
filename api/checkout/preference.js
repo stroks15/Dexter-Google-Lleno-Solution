@@ -15,6 +15,11 @@ export default async function handler(req,res){
    if(used?.length)return json(res,409,{error:"coupon_already_redeemed"});
   }
   if(coupon?.grants_lifetime){
+   const current=await sb("dexter_user_entitlements?select=mp_preapproval_id,subscription_status&user_id=eq."+encodeURIComponent(user.id));
+   if(current?.[0]?.mp_preapproval_id&&current[0].subscription_status==="authorized"){
+    const {mpPreApproval}=await import("../_lib/mercadopago.js");
+    await mpPreApproval().update({id:String(current[0].mp_preapproval_id),body:{status:"cancelled"}});
+   }
    await sb("dexter_coupon_redemptions",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify([{user_id:user.id,coupon_code:code}])});
    await sb("dexter_user_entitlements?on_conflict=user_id",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify([{user_id:user.id,plan_type:"premium_lifetime",discount_coupon_applied:code,lifetime_granted_at:new Date().toISOString(),subscription_status:null,mp_preapproval_id:null}])});
    await (await import("../_lib/runtime.js")).redisSet("dexter:entitlement:"+user.id,{plan_type:"premium_lifetime",updated_at:new Date().toISOString()});
